@@ -1,0 +1,19 @@
+{
+  "items": [
+    { "phrase": "what is my ip address", "command": "ip addr" },
+    { "phrase": "check network connections", "command": "ip addr" },
+    { "phrase": "ping google", "command": "ping google.com" },
+    { "phrase": "stop background task", "command": "kill %1" },
+    { "phrase": "kill that process", "command": "killall" },
+    { "phrase": "show running apps", "command": "htop" },
+    { "phrase": "list all files", "command": "ls -la" },
+    { "phrase": "delete this folder", "command": "rm -rf" },
+    { "phrase": "make a new directory", "command": "mkdir" },
+    { "phrase": "current time and date", "command": "date" },
+    { "phrase": "how much ram is left", "command": "free -m" },
+    { "phrase": "check disk space", "command": "df -h" },
+    { "phrase": "build rust project", "command": "cargo build" },
+    { "phrase": "run rust code", "command": "cargo run" },
+    { "phrase": "compile cargo app", "command": "cargo build --release" }
+  ]
+}
