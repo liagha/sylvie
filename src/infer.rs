@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::model::Network;
 use candle_core::{Device, Result, Tensor};
 use candle_nn::{VarBuilder, VarMap};
+use candle_transformers::generation::LogitsProcessor;
 
 pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u32>> {
     let mut map = VarMap::new();
@@ -13,29 +14,24 @@ pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u3
 
     let mut sequence = input.to_vec();
     let limit = 20;
+    let mut processor = LogitsProcessor::new(42, Some(0.7), None);
 
     for _ in 0..limit {
         let length = sequence.len();
         let tensor = Tensor::from_vec(sequence.clone(), (1, length), device)?;
         let logits = network.forward(&tensor)?;
 
-        let array = logits.to_vec3::<f32>()?;
-        let last = &array[0][length - 1];
+        let last = logits.narrow(1, length - 1, 1)?.squeeze(1)?.squeeze(0)?;
+        let mut array = last.to_vec1::<f32>()?;
 
-        let mut index = 0;
-        let mut highest = f32::NEG_INFINITY;
+        array[0] = f32::NEG_INFINITY;
+        array[1] = f32::NEG_INFINITY;
+        array[3] = f32::NEG_INFINITY;
 
-        for (idx, &val) in last.iter().enumerate() {
-            if idx == 0 || idx == 1 || idx == 3 {
-                continue;
-            }
-            if val > highest {
-                highest = val;
-                index = idx;
-            }
-        }
+        let masked = Tensor::from_vec(array, config.vocab, device)?;
+        let index = processor.sample(&masked)?;
 
-        sequence.push(index as u32);
+        sequence.push(index);
 
         if index == 2 {
             break;

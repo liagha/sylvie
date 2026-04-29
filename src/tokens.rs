@@ -1,88 +1,97 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
+use tokenizers::{
+    decoders::DecoderWrapper,
+    models::bpe::{BpeTrainer, BPE},
+    normalizers::{Lowercase, NormalizerWrapper, Sequence, Strip},
+    pre_tokenizers::{whitespace::Whitespace, PreTokenizerWrapper},
+    processors::PostProcessorWrapper,
+    AddedToken, Tokenizer as Engine, TokenizerImpl,
+};
 
-#[derive(Serialize, Deserialize)]
-pub struct Lexicon {
-    forward: HashMap<String, u32>,
-    reverse: HashMap<u32, String>,
-    counter: u32,
+pub struct Tokenizer {
+    engine: Engine,
 }
 
-impl Lexicon {
-    pub fn new() -> Self {
-        let mut forward = HashMap::new();
-        let mut reverse = HashMap::new();
+impl Tokenizer {
+    pub fn train(iterator: impl IntoIterator<Item = String>) -> Self {
+        let mut trainer = BpeTrainer::builder()
+            .vocab_size(1000)
+            .show_progress(false)
+            .special_tokens(vec![
+                AddedToken::from(String::from("<pad>"), true),
+                AddedToken::from(String::from("<bos>"), true),
+                AddedToken::from(String::from("<eos>"), true),
+                AddedToken::from(String::from("<sep>"), true),
+            ])
+            .build();
 
-        forward.insert(String::from("<pad>"), 0);
-        forward.insert(String::from("<bos>"), 1);
-        forward.insert(String::from("<eos>"), 2);
-        forward.insert(String::from("<sep>"), 3);
+        let mut engine: TokenizerImpl<
+            BPE,
+            NormalizerWrapper,
+            PreTokenizerWrapper,
+            PostProcessorWrapper,
+            DecoderWrapper,
+        > = TokenizerImpl::new(BPE::default());
 
-        reverse.insert(0, String::from("<pad>"));
-        reverse.insert(1, String::from("<bos>"));
-        reverse.insert(2, String::from("<eos>"));
-        reverse.insert(3, String::from("<sep>"));
+        engine.with_normalizer(
+            Sequence::new(vec![Strip::new(true, true).into(), Lowercase.into()]).into(),
+        );
+        engine.with_pre_tokenizer(Whitespace.into());
 
-        Self {
-            forward,
-            reverse,
-            counter: 4,
+        let temp = "temp.txt";
+        let mut file = fs::File::create(temp).unwrap();
+        for text in iterator {
+            writeln!(file, "{}", text).unwrap();
         }
+
+        engine
+            .train_from_files(&mut trainer, vec![temp.to_string()])
+            .unwrap();
+
+        engine.save("temp.json", true).unwrap();
+        fs::remove_file(temp).unwrap();
+
+        let wrapped = Engine::from_file("temp.json").unwrap();
+        fs::remove_file("temp.json").unwrap();
+
+        Self { engine: wrapped }
     }
 
-    pub fn learn(&mut self, text: &str) {
-        for word in text.split_whitespace() {
-            let lower = word.to_lowercase();
-            if !self.forward.contains_key(&lower) {
-                self.forward.insert(lower.clone(), self.counter);
-                self.reverse.insert(self.counter, lower);
-                self.counter += 1;
-            }
-        }
-    }
-
-    pub fn process(&self, text: &str) -> Vec<u32> {
-        let mut result = Vec::new();
-        for word in text.split_whitespace() {
-            let lower = word.to_lowercase();
-            let value = self.forward.get(&lower).copied().unwrap_or(0);
-            result.push(value);
-        }
-        result
+    pub fn encode(&self, text: &str) -> Vec<u32> {
+        self.engine.encode(text, false).unwrap().get_ids().to_vec()
     }
 
     pub fn decode(&self, tokens: &[u32]) -> String {
-        let mut result = Vec::new();
-        let mut in_command = false;
+        let mut command = Vec::new();
+        let mut active = false;
 
         for token in tokens {
             if *token == 2 {
                 break;
             }
-            if in_command && *token > 3 {
-                if let Some(word) = self.reverse.get(token) {
-                    result.push(word.clone());
-                }
+            if active && *token > 3 {
+                command.push(*token);
             }
-            if *token == 3 { // <sep>
-                in_command = true;
+            if *token == 3 {
+                active = true;
             }
         }
-        result.join(" ")
+
+        self.engine.decode(&command, true).unwrap()
     }
 
     pub fn size(&self) -> usize {
-        self.counter as usize
+        self.engine.get_vocab_size(true)
     }
 
     pub fn save(&self, path: &str) {
-        let content = serde_json::to_string(self).unwrap();
-        fs::write(path, content).unwrap();
+        self.engine.save(path, true).unwrap();
     }
 
     pub fn load(path: &str) -> Self {
-        let content = fs::read_to_string(path).unwrap();
-        serde_json::from_str(&content).unwrap()
+        Self {
+            engine: Engine::from_file(path).unwrap(),
+        }
     }
 }

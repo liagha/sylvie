@@ -16,7 +16,7 @@ impl Config {
     }
 
     pub fn save(&self, path: &str) {
-        let content = serde_json::to_string(self).unwrap();
+        let content = serde_json::to_string_pretty(self).unwrap();
         fs::write(path, content).unwrap();
     }
 }
