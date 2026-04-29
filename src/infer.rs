@@ -1,13 +1,15 @@
+use crate::config::Config;
 use crate::model::Network;
 use candle_core::{Device, Result, Tensor};
 use candle_nn::{VarBuilder, VarMap};
 
-pub fn execute(input: &[u32], device: &Device, vocab: usize) -> Result<Vec<u32>> {
+pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u32>> {
     let mut map = VarMap::new();
-    map.load("weights.safetensors")?;
 
     let variables = VarBuilder::from_varmap(&map, candle_core::DType::F32, device);
-    let network = Network::new(variables, vocab, 64, 4, 128)?;
+    let network = Network::new(variables, config.vocab, config.dim, config.heads, config.limit)?;
+
+    map.load("weights.safetensors")?;
 
     let mut sequence = input.to_vec();
     let limit = 20;
