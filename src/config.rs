@@ -6,6 +6,7 @@ pub struct Config {
     pub vocab: usize,
     pub dim: usize,
     pub heads: usize,
+    pub layers: usize,
     pub limit: usize,
     pub drop: f32,
 }

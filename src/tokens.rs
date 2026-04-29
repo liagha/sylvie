@@ -70,7 +70,7 @@ impl Tokenizer {
             if *token == 2 {
                 break;
             }
-            if active && *token > 3 {
+            if active {
                 command.push(*token);
             }
             if *token == 3 {

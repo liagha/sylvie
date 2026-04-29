@@ -98,26 +98,51 @@ impl Forward {
     }
 }
 
+pub struct Block {
+    attn: Attention,
+    norm_attn: LayerNorm,
+    feed: Forward,
+    norm_feed: LayerNorm,
+}
+
+impl Block {
+    pub fn new(dim: usize, heads: usize, drop: f32, variables: VarBuilder) -> Result<Self> {
+        Ok(Self {
+            attn: Attention::new(dim, heads, drop, variables.pp("attn"))?,
+            norm_attn: layer_norm(dim, 1e-5, variables.pp("norm_attn"))?,
+            feed: Forward::new(dim, drop, variables.pp("feed"))?,
+            norm_feed: layer_norm(dim, 1e-5, variables.pp("norm_feed"))?,
+        })
+    }
+
+    pub fn forward(&self, state: &Tensor, train: bool) -> Result<Tensor> {
+        let attended = self.attn.forward(&self.norm_attn.forward(state)?, train)?;
+        let state = (state + attended)?;
+        let forward = self.feed.forward(&self.norm_feed.forward(&state)?, train)?;
+        state + forward
+    }
+}
+
 pub struct Network {
     tokens: Embedding,
     positions: Embedding,
-    attn: Attention,
-    norm_one: LayerNorm,
-    feed: Forward,
-    norm_two: LayerNorm,
+    blocks: Vec<Block>,
+    norm: LayerNorm,
     output: Linear,
     drop: Dropout,
 }
 
 impl Network {
-    pub fn new(variables: VarBuilder, vocab: usize, dim: usize, heads: usize, limit: usize, drop: f32) -> Result<Self> {
+    pub fn new(variables: VarBuilder, vocab: usize, dim: usize, heads: usize, limit: usize, drop: f32, layers: usize) -> Result<Self> {
+        let mut blocks = Vec::with_capacity(layers);
+        for index in 0..layers {
+            blocks.push(Block::new(dim, heads, drop, variables.pp(format!("block_{}", index)))?);
+        }
         Ok(Self {
             tokens: embedding(vocab, dim, variables.pp("tokens"))?,
             positions: embedding(limit, dim, variables.pp("positions"))?,
-            attn: Attention::new(dim, heads, drop, variables.pp("attn"))?,
-            norm_one: layer_norm(dim, 1e-5, variables.pp("norm_one"))?,
-            feed: Forward::new(dim, drop, variables.pp("feed"))?,
-            norm_two: layer_norm(dim, 1e-5, variables.pp("norm_two"))?,
+            blocks,
+            norm: layer_norm(dim, 1e-5, variables.pp("norm"))?,
             output: linear(dim, vocab, variables.pp("output"))?,
             drop: Dropout::new(drop),
         })
@@ -129,17 +154,14 @@ impl Network {
 
         let words = self.tokens.forward(input)?;
         let places = self.positions.forward(&steps)?;
-        let state = words.broadcast_add(&places)?;
-        let dropped = self.drop.forward(&state, train)?;
+        let mut state = words.broadcast_add(&places)?;
+        state = self.drop.forward(&state, train)?;
 
-        let first = self.norm_one.forward(&dropped)?;
-        let attended = self.attn.forward(&first, train)?;
-        let combined = (&dropped + &attended)?;
+        for block in &self.blocks {
+            state = block.forward(&state, train)?;
+        }
 
-        let second = self.norm_two.forward(&combined)?;
-        let forward = self.feed.forward(&second, train)?;
-        let merged = (&combined + &forward)?;
-
-        self.output.forward(&merged)
+        let normalized = self.norm.forward(&state)?;
+        self.output.forward(&normalized)
     }
 }

@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::model::Network;
-use candle_core::{Device, Result, Tensor};
-use candle_nn::{loss, AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
+use candle_core::{Device, Result, Tensor, D};
+use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap, ops};
 use rand::seq::SliceRandom;
 
 pub fn execute(
@@ -14,7 +14,7 @@ pub fn execute(
     config: &Config,
 ) -> Result<()> {
     let variables = VarBuilder::from_varmap(map, candle_core::DType::F32, device);
-    let network = Network::new(variables, config.vocab, config.dim, config.heads, config.limit, config.drop)?;
+    let network = Network::new(variables, config.vocab, config.dim, config.heads, config.limit, config.drop, config.layers)?;
 
     let mut parameters = ParamsAdamW::default();
     parameters.lr = 0.001;
@@ -26,11 +26,14 @@ pub fn execute(
 
     let (_valid_rows, valid_cols) = valid_in.dims2()?;
     let valid_inputs = valid_in.narrow(1, 0, valid_cols - 1)?.contiguous()?;
-    let valid_targets = valid_out.narrow(1, 1, valid_cols - 1)?.contiguous()?.flatten_all()?;
+    let valid_targets = valid_out.narrow(1, 1, valid_cols - 1)?.contiguous()?;
 
     let batch = 32;
     let mut gen = rand::rng();
     let mut indices: Vec<u32> = (0..train_rows as u32).collect();
+
+    let mut best_valid = f32::MAX;
+    let mut stale = 0u32;
 
     for epoch in 0..150 {
         indices.shuffle(&mut gen);
@@ -48,7 +51,14 @@ pub fn execute(
 
             let predictions = network.forward(&batch_inputs, true)?;
             let reshaped = predictions.reshape(((), config.vocab))?;
-            let error = loss::cross_entropy(&reshaped, &batch_targets)?;
+
+            let log_probs = ops::log_softmax(&reshaped, D::Minus1)?;
+            let gathered = log_probs.gather(&batch_targets.unsqueeze(1)?, 1)?;
+            let nll = gathered.neg()?.squeeze(1)?;
+            let mask = batch_targets.ne(0u32)?.to_dtype(candle_core::DType::F32)?;
+            let masked = nll.broadcast_mul(&mask)?;
+            let valid = mask.sum_all()?;
+            let error = masked.sum_all()?.broadcast_div(&valid)?;
 
             optimizer.backward_step(&error)?;
             total += error.to_scalar::<f32>()?;
@@ -59,17 +69,34 @@ pub fn execute(
 
         let valid_predictions = network.forward(&valid_inputs, false)?;
         let valid_reshaped = valid_predictions.reshape(((), config.vocab))?;
-        let valid_error = loss::cross_entropy(&valid_reshaped, &valid_targets)?;
-        let valid_value = valid_error.to_scalar::<f32>()?;
+        let valid_targets_flat = valid_targets.flatten_all()?;
+
+        let valid_log_probs = ops::log_softmax(&valid_reshaped, D::Minus1)?;
+        let valid_gathered = valid_log_probs.gather(&valid_targets_flat.unsqueeze(1)?, 1)?;
+        let valid_nll = valid_gathered.neg()?.squeeze(1)?;
+        let valid_mask = valid_targets_flat.ne(0u32)?.to_dtype(candle_core::DType::F32)?;
+        let valid_masked = valid_nll.broadcast_mul(&valid_mask)?;
+        let valid_count = valid_mask.sum_all()?;
+        let valid_value = valid_masked.sum_all()?.broadcast_div(&valid_count)?.to_scalar::<f32>()?;
 
         println!("epoch {} train {} valid {}", epoch, average, valid_value);
+
+        if valid_value < best_valid - 1e-4 {
+            best_valid = valid_value;
+            stale = 0;
+            map.save("weights.safetensors")?;
+        } else {
+            stale += 1;
+            if stale >= 15 {
+                println!("early stop");
+                break;
+            }
+        }
 
         if average < 0.10 {
             break;
         }
     }
-
-    map.save("weights.safetensors")?;
 
     Ok(())
 }

@@ -8,13 +8,13 @@ pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u3
     let mut map = VarMap::new();
 
     let variables = VarBuilder::from_varmap(&map, candle_core::DType::F32, device);
-    let network = Network::new(variables, config.vocab, config.dim, config.heads, config.limit, config.drop)?;
+    let network = Network::new(variables, config.vocab, config.dim, config.heads, config.limit, config.drop, config.layers)?;
 
     map.load("weights.safetensors")?;
 
     let mut sequence = input.to_vec();
     let limit = 20;
-    let mut processor = LogitsProcessor::new(42, Some(0.7), None);
+    let mut processor = LogitsProcessor::new(42, Some(0.5), Some(50.0));
 
     for _ in 0..limit {
         let length = sequence.len();
@@ -26,7 +26,6 @@ pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u3
 
         array[0] = f32::NEG_INFINITY;
         array[1] = f32::NEG_INFINITY;
-        array[3] = f32::NEG_INFINITY;
 
         let masked = Tensor::from_vec(array, config.vocab, device)?;
         let index = processor.sample(&masked)?;

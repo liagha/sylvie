@@ -77,10 +77,12 @@ fn main() -> Result<()> {
             let config = Config {
                 vocab: tokenizer.size(),
                 dim: 128,
-                heads: 8,
+                heads: 4,
+                layers: 2,
                 limit: 256,
-                drop: 0.3,
+                drop: 0.4,
             };
+
             config.save("config.json");
 
             train::execute(&train_in, &train_out, &valid_in, &valid_out, &map, &device, &config)?;
