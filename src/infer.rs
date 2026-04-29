@@ -8,7 +8,7 @@ pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u3
     let mut map = VarMap::new();
 
     let variables = VarBuilder::from_varmap(&map, candle_core::DType::F32, device);
-    let network = Network::new(variables, config.vocab, config.dim, config.heads, config.limit)?;
+    let network = Network::new(variables, config.vocab, config.dim, config.heads, config.limit, config.drop)?;
 
     map.load("weights.safetensors")?;
 
@@ -19,7 +19,7 @@ pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u3
     for _ in 0..limit {
         let length = sequence.len();
         let tensor = Tensor::from_vec(sequence.clone(), (1, length), device)?;
-        let logits = network.forward(&tensor)?;
+        let logits = network.forward(&tensor, false)?;
 
         let last = logits.narrow(1, length - 1, 1)?.squeeze(1)?.squeeze(0)?;
         let mut array = last.to_vec1::<f32>()?;

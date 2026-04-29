@@ -7,6 +7,7 @@ pub struct Config {
     pub dim: usize,
     pub heads: usize,
     pub limit: usize,
+    pub drop: f32,
 }
 
 impl Config {

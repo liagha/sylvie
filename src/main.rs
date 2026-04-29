@@ -1,6 +1,6 @@
-// src/main.rs
 mod config;
 mod data;
+mod gen;
 mod infer;
 mod model;
 mod tokens;
@@ -11,7 +11,7 @@ use candle_nn::VarMap;
 use config::Config;
 use data::Corpus;
 use std::env;
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 use std::process::Command;
 use tokens::Tokenizer;
 
@@ -45,6 +45,9 @@ fn main() -> Result<()> {
     let device = Device::Cpu;
 
     match mode {
+        "gen" => {
+            gen::execute();
+        }
         "train" => {
             let map = VarMap::new();
             let corpus = Corpus::load("dataset.json");
@@ -76,40 +79,67 @@ fn main() -> Result<()> {
                 dim: 128,
                 heads: 8,
                 limit: 256,
+                drop: 0.3,
             };
             config.save("config.json");
 
             train::execute(&train_in, &train_out, &valid_in, &valid_out, &map, &device, &config)?;
         }
         "infer" => {
-            let default = String::from("");
-            let query = args.get(2).unwrap_or(&default);
             let tokenizer = Tokenizer::load("tokenizer.json");
             let config = Config::load("config.json");
+            let mut corpus = Corpus::load("dataset.json");
 
-            let mut encoded = Vec::new();
-            encoded.push(1);
-            encoded.extend(tokenizer.encode(query));
-            encoded.push(3);
+            let stdin = io::stdin();
+            let mut handle = stdin.lock();
 
-            let output = infer::execute(&encoded, &device, &config)?;
-            let text = tokenizer.decode(&output);
+            loop {
+                print!("query: ");
+                io::stdout().flush().unwrap();
 
-            println!("sylvie: {}", text);
-            print!("execute? (y/n): ");
-            io::stdout().flush().unwrap();
+                let mut query = String::new();
+                handle.read_line(&mut query).unwrap();
+                let query = query.trim();
 
-            let mut answer = String::new();
-            io::stdin().read_line(&mut answer).unwrap();
+                if query.eq_ignore_ascii_case("quit") || query.eq_ignore_ascii_case("exit") {
+                    corpus.save("dataset.json");
+                    break;
+                }
 
-            if answer.trim().eq_ignore_ascii_case("y") {
-                let parts: Vec<&str> = text.split_whitespace().collect();
-                if !parts.is_empty() {
-                    let mut process = Command::new(parts[0]);
-                    if parts.len() > 1 {
-                        process.args(&parts[1..]);
+                if query.is_empty() {
+                    continue;
+                }
+
+                let mut encoded = Vec::new();
+                encoded.push(1);
+                encoded.extend(tokenizer.encode(query));
+                encoded.push(3);
+
+                let output = infer::execute(&encoded, &device, &config)?;
+                let text = tokenizer.decode(&output);
+
+                println!("sylvie: {}", text);
+                print!("feedback (y/n/command): ");
+                io::stdout().flush().unwrap();
+
+                let mut answer = String::new();
+                handle.read_line(&mut answer).unwrap();
+                let answer = answer.trim();
+
+                if answer.eq_ignore_ascii_case("y") {
+                    let parts: Vec<&str> = text.split_whitespace().collect();
+                    if !parts.is_empty() {
+                        let mut process = Command::new(parts[0]);
+                        if parts.len() > 1 {
+                            process.args(&parts[1..]);
+                        }
+                        process.status().unwrap();
                     }
-                    process.status().unwrap();
+                } else if !answer.eq_ignore_ascii_case("n") && !answer.is_empty() {
+                    corpus.items.push(data::Record {
+                        phrase: query.to_string(),
+                        command: answer.to_string(),
+                    });
                 }
             }
         }

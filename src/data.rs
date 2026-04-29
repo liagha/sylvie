@@ -20,11 +20,16 @@ impl Corpus {
         serde_json::from_str(&content).unwrap()
     }
 
+    pub fn save(&self, path: &str) {
+        let content = serde_json::to_string_pretty(self).unwrap();
+        fs::write(path, content).unwrap();
+    }
+
     pub fn split(mut self) -> (Self, Self) {
         let mut gen = rng();
         self.items.shuffle(&mut gen);
         let point = (self.items.len() as f32 * 0.9) as usize;
-        let validation = self.items.split_off(point);
-        (Self { items: self.items }, Self { items: validation })
+        let valid = self.items.split_off(point);
+        (Self { items: self.items }, Self { items: valid })
     }
 }

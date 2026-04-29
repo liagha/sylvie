@@ -1,49 +1,672 @@
 {
   "items": [
-    { "phrase": "what is my ip address", "command": "ip addr" },
-    { "phrase": "check network connections", "command": "ip addr" },
-    { "phrase": "ping google", "command": "ping google.com" },
-    { "phrase": "stop background task", "command": "kill %1" },
-    { "phrase": "kill that process", "command": "killall" },
-    { "phrase": "show running apps", "command": "htop" },
-    { "phrase": "list all files", "command": "ls -la" },
-    { "phrase": "delete this folder", "command": "rm -rf" },
-    { "phrase": "make a new directory", "command": "mkdir" },
-    { "phrase": "current time and date", "command": "date" },
-    { "phrase": "how much ram is left", "command": "free -m" },
-    { "phrase": "check disk space", "command": "df -h" },
-    { "phrase": "build rust project", "command": "cargo build" },
-    { "phrase": "run rust code", "command": "cargo run" },
-    { "phrase": "compile cargo app", "command": "cargo build --release" },
-    { "phrase": "find a file by name", "command": "find . -name" },
-    { "phrase": "search text in file", "command": "grep -r" },
-    { "phrase": "extract column from file", "command": "awk '{print $1}'" },
-    { "phrase": "start docker service", "command": "systemctl start docker" },
-    { "phrase": "restart nginx", "command": "systemctl restart nginx" },
-    { "phrase": "stop apache", "command": "systemctl stop apache2" },
-    { "phrase": "status of ssh", "command": "systemctl status sshd" },
-    { "phrase": "list docker containers", "command": "docker ps" },
-    { "phrase": "show docker images", "command": "docker images" },
-    { "phrase": "remove docker container", "command": "docker rm" },
-    { "phrase": "run ubuntu container", "command": "docker run -it ubuntu" },
-    { "phrase": "pull latest node image", "command": "docker pull node:latest" },
-    { "phrase": "view system logs", "command": "journalctl -xe" },
-    { "phrase": "tail application logs", "command": "tail -f" },
-    { "phrase": "read file contents", "command": "cat" },
-    { "phrase": "show end of file", "command": "tail" },
-    { "phrase": "print working directory", "command": "pwd" },
-    { "phrase": "change ownership to root", "command": "chown root:root" },
-    { "phrase": "make script executable", "command": "chmod +x" },
-    { "phrase": "unzip file", "command": "unzip" },
-    { "phrase": "compress folder", "command": "tar -czvf" },
-    { "phrase": "extract tar archive", "command": "tar -xzvf" },
-    { "phrase": "download from url", "command": "wget" },
-    { "phrase": "make http request", "command": "curl" },
-    { "phrase": "show open ports", "command": "netstat -tuln" },
-    { "phrase": "check listening sockets", "command": "ss -tuln" },
-    { "phrase": "list block devices", "command": "lsblk" },
-    { "phrase": "view hardware info", "command": "lshw" },
-    { "phrase": "copy file", "command": "cp" },
-    { "phrase": "move folder", "command": "mv" }
+    {
+      "phrase": "delete folder /tmp/test",
+      "command": "rm -rf /tmp/test"
+    },
+    {
+      "phrase": "remove directory /tmp/test",
+      "command": "rm -rf /tmp/test"
+    },
+    {
+      "phrase": "wipe /tmp/test",
+      "command": "rm -rf /tmp/test"
+    },
+    {
+      "phrase": "delete /tmp/test",
+      "command": "rm -rf /tmp/test"
+    },
+    {
+      "phrase": "delete folder /var/www",
+      "command": "rm -rf /var/www"
+    },
+    {
+      "phrase": "remove directory /var/www",
+      "command": "rm -rf /var/www"
+    },
+    {
+      "phrase": "wipe /var/www",
+      "command": "rm -rf /var/www"
+    },
+    {
+      "phrase": "delete /var/www",
+      "command": "rm -rf /var/www"
+    },
+    {
+      "phrase": "delete folder build",
+      "command": "rm -rf build"
+    },
+    {
+      "phrase": "remove directory build",
+      "command": "rm -rf build"
+    },
+    {
+      "phrase": "wipe build",
+      "command": "rm -rf build"
+    },
+    {
+      "phrase": "delete build",
+      "command": "rm -rf build"
+    },
+    {
+      "phrase": "delete folder dist",
+      "command": "rm -rf dist"
+    },
+    {
+      "phrase": "remove directory dist",
+      "command": "rm -rf dist"
+    },
+    {
+      "phrase": "wipe dist",
+      "command": "rm -rf dist"
+    },
+    {
+      "phrase": "delete dist",
+      "command": "rm -rf dist"
+    },
+    {
+      "phrase": "delete folder src",
+      "command": "rm -rf src"
+    },
+    {
+      "phrase": "remove directory src",
+      "command": "rm -rf src"
+    },
+    {
+      "phrase": "wipe src",
+      "command": "rm -rf src"
+    },
+    {
+      "phrase": "delete src",
+      "command": "rm -rf src"
+    },
+    {
+      "phrase": "delete folder .git",
+      "command": "rm -rf .git"
+    },
+    {
+      "phrase": "remove directory .git",
+      "command": "rm -rf .git"
+    },
+    {
+      "phrase": "wipe .git",
+      "command": "rm -rf .git"
+    },
+    {
+      "phrase": "delete .git",
+      "command": "rm -rf .git"
+    },
+    {
+      "phrase": "delete folder node_modules",
+      "command": "rm -rf node_modules"
+    },
+    {
+      "phrase": "remove directory node_modules",
+      "command": "rm -rf node_modules"
+    },
+    {
+      "phrase": "wipe node_modules",
+      "command": "rm -rf node_modules"
+    },
+    {
+      "phrase": "delete node_modules",
+      "command": "rm -rf node_modules"
+    },
+    {
+      "phrase": "ping 8.8.8.8",
+      "command": "ping 8.8.8.8"
+    },
+    {
+      "phrase": "check connection to 8.8.8.8",
+      "command": "ping 8.8.8.8"
+    },
+    {
+      "phrase": "reach 8.8.8.8",
+      "command": "ping 8.8.8.8"
+    },
+    {
+      "phrase": "ping 1.1.1.1",
+      "command": "ping 1.1.1.1"
+    },
+    {
+      "phrase": "check connection to 1.1.1.1",
+      "command": "ping 1.1.1.1"
+    },
+    {
+      "phrase": "reach 1.1.1.1",
+      "command": "ping 1.1.1.1"
+    },
+    {
+      "phrase": "ping 127.0.0.1",
+      "command": "ping 127.0.0.1"
+    },
+    {
+      "phrase": "check connection to 127.0.0.1",
+      "command": "ping 127.0.0.1"
+    },
+    {
+      "phrase": "reach 127.0.0.1",
+      "command": "ping 127.0.0.1"
+    },
+    {
+      "phrase": "ping 192.168.1.1",
+      "command": "ping 192.168.1.1"
+    },
+    {
+      "phrase": "check connection to 192.168.1.1",
+      "command": "ping 192.168.1.1"
+    },
+    {
+      "phrase": "reach 192.168.1.1",
+      "command": "ping 192.168.1.1"
+    },
+    {
+      "phrase": "ping 10.0.0.1",
+      "command": "ping 10.0.0.1"
+    },
+    {
+      "phrase": "check connection to 10.0.0.1",
+      "command": "ping 10.0.0.1"
+    },
+    {
+      "phrase": "reach 10.0.0.1",
+      "command": "ping 10.0.0.1"
+    },
+    {
+      "phrase": "who is on port 80",
+      "command": "lsof -i :80"
+    },
+    {
+      "phrase": "check port 80",
+      "command": "lsof -i :80"
+    },
+    {
+      "phrase": "who is on port 443",
+      "command": "lsof -i :443"
+    },
+    {
+      "phrase": "check port 443",
+      "command": "lsof -i :443"
+    },
+    {
+      "phrase": "who is on port 8080",
+      "command": "lsof -i :8080"
+    },
+    {
+      "phrase": "check port 8080",
+      "command": "lsof -i :8080"
+    },
+    {
+      "phrase": "who is on port 22",
+      "command": "lsof -i :22"
+    },
+    {
+      "phrase": "check port 22",
+      "command": "lsof -i :22"
+    },
+    {
+      "phrase": "who is on port 3306",
+      "command": "lsof -i :3306"
+    },
+    {
+      "phrase": "check port 3306",
+      "command": "lsof -i :3306"
+    },
+    {
+      "phrase": "start docker",
+      "command": "systemctl start docker"
+    },
+    {
+      "phrase": "stop docker",
+      "command": "systemctl stop docker"
+    },
+    {
+      "phrase": "restart docker",
+      "command": "systemctl restart docker"
+    },
+    {
+      "phrase": "reload docker",
+      "command": "systemctl reload docker"
+    },
+    {
+      "phrase": "status docker",
+      "command": "systemctl status docker"
+    },
+    {
+      "phrase": "start nginx",
+      "command": "systemctl start nginx"
+    },
+    {
+      "phrase": "stop nginx",
+      "command": "systemctl stop nginx"
+    },
+    {
+      "phrase": "restart nginx",
+      "command": "systemctl restart nginx"
+    },
+    {
+      "phrase": "reload nginx",
+      "command": "systemctl reload nginx"
+    },
+    {
+      "phrase": "status nginx",
+      "command": "systemctl status nginx"
+    },
+    {
+      "phrase": "start apache2",
+      "command": "systemctl start apache2"
+    },
+    {
+      "phrase": "stop apache2",
+      "command": "systemctl stop apache2"
+    },
+    {
+      "phrase": "restart apache2",
+      "command": "systemctl restart apache2"
+    },
+    {
+      "phrase": "reload apache2",
+      "command": "systemctl reload apache2"
+    },
+    {
+      "phrase": "status apache2",
+      "command": "systemctl status apache2"
+    },
+    {
+      "phrase": "start sshd",
+      "command": "systemctl start sshd"
+    },
+    {
+      "phrase": "stop sshd",
+      "command": "systemctl stop sshd"
+    },
+    {
+      "phrase": "restart sshd",
+      "command": "systemctl restart sshd"
+    },
+    {
+      "phrase": "reload sshd",
+      "command": "systemctl reload sshd"
+    },
+    {
+      "phrase": "status sshd",
+      "command": "systemctl status sshd"
+    },
+    {
+      "phrase": "start mysql",
+      "command": "systemctl start mysql"
+    },
+    {
+      "phrase": "stop mysql",
+      "command": "systemctl stop mysql"
+    },
+    {
+      "phrase": "restart mysql",
+      "command": "systemctl restart mysql"
+    },
+    {
+      "phrase": "reload mysql",
+      "command": "systemctl reload mysql"
+    },
+    {
+      "phrase": "status mysql",
+      "command": "systemctl status mysql"
+    },
+    {
+      "phrase": "what is my ip address",
+      "command": "ip addr"
+    },
+    {
+      "phrase": "show my ip",
+      "command": "ip addr"
+    },
+    {
+      "phrase": "network interfaces",
+      "command": "ip addr"
+    },
+    {
+      "phrase": "check network connections",
+      "command": "ip addr"
+    },
+    {
+      "phrase": "ping google",
+      "command": "ping google.com"
+    },
+    {
+      "phrase": "ping localhost",
+      "command": "ping 127.0.0.1"
+    },
+    {
+      "phrase": "stop background task",
+      "command": "kill %1"
+    },
+    {
+      "phrase": "kill that process",
+      "command": "killall"
+    },
+    {
+      "phrase": "kill process 1234",
+      "command": "kill 1234"
+    },
+    {
+      "phrase": "force stop pid 999",
+      "command": "kill -9 999"
+    },
+    {
+      "phrase": "show running apps",
+      "command": "htop"
+    },
+    {
+      "phrase": "open task manager",
+      "command": "htop"
+    },
+    {
+      "phrase": "system monitor",
+      "command": "htop"
+    },
+    {
+      "phrase": "list all files",
+      "command": "ls -la"
+    },
+    {
+      "phrase": "show hidden files",
+      "command": "ls -a"
+    },
+    {
+      "phrase": "list directory contents",
+      "command": "ls -l"
+    },
+    {
+      "phrase": "delete this folder",
+      "command": "rm -rf"
+    },
+    {
+      "phrase": "remove file data.txt",
+      "command": "rm data.txt"
+    },
+    {
+      "phrase": "delete image.png",
+      "command": "rm image.png"
+    },
+    {
+      "phrase": "make a new directory",
+      "command": "mkdir"
+    },
+    {
+      "phrase": "create folder build",
+      "command": "mkdir build"
+    },
+    {
+      "phrase": "make directory src/app",
+      "command": "mkdir -p src/app"
+    },
+    {
+      "phrase": "current time and date",
+      "command": "date"
+    },
+    {
+      "phrase": "what time is it",
+      "command": "date"
+    },
+    {
+      "phrase": "how much ram is left",
+      "command": "free -m"
+    },
+    {
+      "phrase": "show memory usage",
+      "command": "free -h"
+    },
+    {
+      "phrase": "check disk space",
+      "command": "df -h"
+    },
+    {
+      "phrase": "how full is my drive",
+      "command": "df -h"
+    },
+    {
+      "phrase": "build rust project",
+      "command": "cargo build"
+    },
+    {
+      "phrase": "compile rust",
+      "command": "cargo build"
+    },
+    {
+      "phrase": "run rust code",
+      "command": "cargo run"
+    },
+    {
+      "phrase": "execute rust app",
+      "command": "cargo run"
+    },
+    {
+      "phrase": "compile cargo app release",
+      "command": "cargo build --release"
+    },
+    {
+      "phrase": "build rust release mode",
+      "command": "cargo build --release"
+    },
+    {
+      "phrase": "find a file by name",
+      "command": "find . -name"
+    },
+    {
+      "phrase": "search for main.rs",
+      "command": "find . -name main.rs"
+    },
+    {
+      "phrase": "find config.json",
+      "command": "find . -name config.json"
+    },
+    {
+      "phrase": "search text in file",
+      "command": "grep -r"
+    },
+    {
+      "phrase": "find error in logs",
+      "command": "grep 'error' /var/log/syslog"
+    },
+    {
+      "phrase": "search for warning in app.log",
+      "command": "grep 'warning' app.log"
+    },
+    {
+      "phrase": "start docker service",
+      "command": "systemctl start docker"
+    },
+    {
+      "phrase": "reload nginx config",
+      "command": "systemctl reload nginx"
+    },
+    {
+      "phrase": "stop apache",
+      "command": "systemctl stop apache2"
+    },
+    {
+      "phrase": "status of ssh",
+      "command": "systemctl status sshd"
+    },
+    {
+      "phrase": "is ssh running",
+      "command": "systemctl status sshd"
+    },
+    {
+      "phrase": "list docker containers",
+      "command": "docker ps"
+    },
+    {
+      "phrase": "show active docker containers",
+      "command": "docker ps"
+    },
+    {
+      "phrase": "list all docker containers",
+      "command": "docker ps -a"
+    },
+    {
+      "phrase": "show docker images",
+      "command": "docker images"
+    },
+    {
+      "phrase": "remove docker container",
+      "command": "docker rm"
+    },
+    {
+      "phrase": "delete docker container web",
+      "command": "docker rm web"
+    },
+    {
+      "phrase": "run ubuntu container",
+      "command": "docker run -it ubuntu"
+    },
+    {
+      "phrase": "pull latest node image",
+      "command": "docker pull node:latest"
+    },
+    {
+      "phrase": "download python alpine",
+      "command": "docker pull python:alpine"
+    },
+    {
+      "phrase": "view system logs",
+      "command": "journalctl -xe"
+    },
+    {
+      "phrase": "tail application logs",
+      "command": "tail -f"
+    },
+    {
+      "phrase": "watch syslog",
+      "command": "tail -f /var/log/syslog"
+    },
+    {
+      "phrase": "read file contents",
+      "command": "cat"
+    },
+    {
+      "phrase": "print readme file",
+      "command": "cat README.md"
+    },
+    {
+      "phrase": "show end of file",
+      "command": "tail"
+    },
+    {
+      "phrase": "print working directory",
+      "command": "pwd"
+    },
+    {
+      "phrase": "where am i",
+      "command": "pwd"
+    },
+    {
+      "phrase": "change ownership to root",
+      "command": "chown root:root"
+    },
+    {
+      "phrase": "make script executable",
+      "command": "chmod +x"
+    },
+    {
+      "phrase": "give execute permission to script.sh",
+      "command": "chmod +x script.sh"
+    },
+    {
+      "phrase": "unzip file",
+      "command": "unzip"
+    },
+    {
+      "phrase": "extract archive.zip",
+      "command": "unzip archive.zip"
+    },
+    {
+      "phrase": "compress folder",
+      "command": "tar -czvf"
+    },
+    {
+      "phrase": "tar directory backup",
+      "command": "tar -czvf backup.tar.gz backup/"
+    },
+    {
+      "phrase": "extract tar archive",
+      "command": "tar -xzvf"
+    },
+    {
+      "phrase": "download from url",
+      "command": "wget"
+    },
+    {
+      "phrase": "download http://example.com/file",
+      "command": "wget http://example.com/file"
+    },
+    {
+      "phrase": "make http request",
+      "command": "curl"
+    },
+    {
+      "phrase": "fetch https://api.github.com",
+      "command": "curl https://api.github.com"
+    },
+    {
+      "phrase": "show open ports",
+      "command": "netstat -tuln"
+    },
+    {
+      "phrase": "check listening sockets",
+      "command": "ss -tuln"
+    },
+    {
+      "phrase": "list block devices",
+      "command": "lsblk"
+    },
+    {
+      "phrase": "show attached drives",
+      "command": "lsblk"
+    },
+    {
+      "phrase": "view hardware info",
+      "command": "lshw"
+    },
+    {
+      "phrase": "copy file",
+      "command": "cp"
+    },
+    {
+      "phrase": "copy index.html to backup.html",
+      "command": "cp index.html backup.html"
+    },
+    {
+      "phrase": "move folder",
+      "command": "mv"
+    },
+    {
+      "phrase": "rename old.txt to new.txt",
+      "command": "mv old.txt new.txt"
+    },
+    {
+      "phrase": "clear the terminal",
+      "command": "clear"
+    },
+    {
+      "phrase": "wipe screen",
+      "command": "clear"
+    },
+    {
+      "phrase": "update apt packages",
+      "command": "apt update"
+    },
+    {
+      "phrase": "upgrade system packages",
+      "command": "apt upgrade -y"
+    },
+    {
+      "phrase": "install git",
+      "command": "apt install git -y"
+    },
+    {
+      "phrase": "remove vim",
+      "command": "apt remove vim -y"
+    }
   ]
 }

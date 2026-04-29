@@ -1,5 +1,5 @@
 use candle_core::{Result, Tensor, D};
-use candle_nn::{embedding, layer_norm, linear, Embedding, LayerNorm, Linear, Module, VarBuilder};
+use candle_nn::{embedding, layer_norm, linear, Dropout, Embedding, LayerNorm, Linear, Module, VarBuilder};
 
 pub struct Attention {
     query: Linear,
@@ -8,10 +8,11 @@ pub struct Attention {
     project: Linear,
     heads: usize,
     scale: f64,
+    drop: Dropout,
 }
 
 impl Attention {
-    pub fn new(dim: usize, heads: usize, variables: VarBuilder) -> Result<Self> {
+    pub fn new(dim: usize, heads: usize, drop: f32, variables: VarBuilder) -> Result<Self> {
         Ok(Self {
             query: linear(dim, dim, variables.pp("query"))?,
             key: linear(dim, dim, variables.pp("key"))?,
@@ -19,10 +20,11 @@ impl Attention {
             project: linear(dim, dim, variables.pp("project"))?,
             heads,
             scale: 1.0 / ((dim / heads) as f64).sqrt(),
+            drop: Dropout::new(drop),
         })
     }
 
-    pub fn forward(&self, state: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, state: &Tensor, train: bool) -> Result<Tensor> {
         let (batch, seq, dim) = state.dims3()?;
         let size = dim / self.heads;
 
@@ -49,7 +51,8 @@ impl Attention {
         let masked = scaled.broadcast_add(&mask)?;
 
         let weights = candle_nn::ops::softmax(&masked, D::Minus1)?;
-        let context = weights.matmul(&values)?;
+        let dropped = self.drop.forward(&weights, train)?;
+        let context = dropped.matmul(&values)?;
         let merged = context.transpose(1, 2)?.contiguous()?.reshape((batch, seq, dim))?;
 
         self.project.forward(&merged)
@@ -74,21 +77,24 @@ impl Attention {
 pub struct Forward {
     inner: Linear,
     outer: Linear,
+    drop: Dropout,
 }
 
 impl Forward {
-    pub fn new(dim: usize, variables: VarBuilder) -> Result<Self> {
+    pub fn new(dim: usize, drop: f32, variables: VarBuilder) -> Result<Self> {
         let hidden = dim * 4;
         Ok(Self {
             inner: linear(dim, hidden, variables.pp("inner"))?,
             outer: linear(hidden, dim, variables.pp("outer"))?,
+            drop: Dropout::new(drop),
         })
     }
 
-    pub fn forward(&self, state: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, state: &Tensor, train: bool) -> Result<Tensor> {
         let hidden = self.inner.forward(state)?;
         let activated = hidden.gelu()?;
-        self.outer.forward(&activated)
+        let dropped = self.drop.forward(&activated, train)?;
+        self.outer.forward(&dropped)
     }
 }
 
@@ -100,35 +106,38 @@ pub struct Network {
     feed: Forward,
     norm_two: LayerNorm,
     output: Linear,
+    drop: Dropout,
 }
 
 impl Network {
-    pub fn new(variables: VarBuilder, vocab: usize, dim: usize, heads: usize, limit: usize) -> Result<Self> {
+    pub fn new(variables: VarBuilder, vocab: usize, dim: usize, heads: usize, limit: usize, drop: f32) -> Result<Self> {
         Ok(Self {
             tokens: embedding(vocab, dim, variables.pp("tokens"))?,
             positions: embedding(limit, dim, variables.pp("positions"))?,
-            attn: Attention::new(dim, heads, variables.pp("attn"))?,
+            attn: Attention::new(dim, heads, drop, variables.pp("attn"))?,
             norm_one: layer_norm(dim, 1e-5, variables.pp("norm_one"))?,
-            feed: Forward::new(dim, variables.pp("feed"))?,
+            feed: Forward::new(dim, drop, variables.pp("feed"))?,
             norm_two: layer_norm(dim, 1e-5, variables.pp("norm_two"))?,
             output: linear(dim, vocab, variables.pp("output"))?,
+            drop: Dropout::new(drop),
         })
     }
 
-    pub fn forward(&self, input: &Tensor) -> Result<Tensor> {
+    pub fn forward(&self, input: &Tensor, train: bool) -> Result<Tensor> {
         let (_batch, seq) = input.dims2()?;
         let steps = Tensor::arange(0u32, seq as u32, input.device())?.unsqueeze(0)?;
 
         let words = self.tokens.forward(input)?;
         let places = self.positions.forward(&steps)?;
         let state = words.broadcast_add(&places)?;
+        let dropped = self.drop.forward(&state, train)?;
 
-        let first = self.norm_one.forward(&state)?;
-        let attended = self.attn.forward(&first)?;
-        let combined = (&state + &attended)?;
+        let first = self.norm_one.forward(&dropped)?;
+        let attended = self.attn.forward(&first, train)?;
+        let combined = (&dropped + &attended)?;
 
         let second = self.norm_two.forward(&combined)?;
-        let forward = self.feed.forward(&second)?;
+        let forward = self.feed.forward(&second, train)?;
         let merged = (&combined + &forward)?;
 
         self.output.forward(&merged)

@@ -34,10 +34,10 @@ impl Tokenizer {
             DecoderWrapper,
         > = TokenizerImpl::new(BPE::default());
 
-        engine.with_normalizer(
+        let _ = engine.with_normalizer(
             Sequence::new(vec![Strip::new(true, true).into(), Lowercase.into()]).into(),
         );
-        engine.with_pre_tokenizer(Whitespace.into());
+        let _ = engine.with_pre_tokenizer(Whitespace.into());
 
         let temp = "temp.txt";
         let mut file = fs::File::create(temp).unwrap();
