@@ -1,3 +1,4 @@
+// FILE: src/main.rs
 mod config;
 mod data;
 mod gen;
@@ -10,6 +11,7 @@ use candle_core::{Device, Result, Tensor};
 use candle_nn::VarMap;
 use config::Config;
 use data::Corpus;
+use std::collections::HashSet;
 use std::env;
 use std::io::{self, BufRead, Write};
 use std::process::Command;
@@ -39,10 +41,41 @@ fn generate(corpus: &Corpus, tokenizer: &Tokenizer, length: usize, device: &Devi
     Ok((inputs, targets))
 }
 
+fn pick_device() -> Device {
+    #[cfg(feature = "cuda")]
+    {
+        if let Ok(dev) = Device::new_cuda(0) {
+            return dev;
+        }
+    }
+    Device::Cpu
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let mode = args.get(1).map(String::as_str).unwrap_or("infer");
-    let device = Device::Cpu;
+
+    let device = if args.iter().any(|a| a == "--cpu") {
+        Device::Cpu
+    } else {
+        pick_device()
+    };
+
+    let allowlist: HashSet<&str> = [
+        "ls", "pwd", "df", "free", "date", "ip", "ping",
+        "docker", "ss", "find", "grep", "cat", "uname",
+        "hostname", "who", "uptime", "tail", "head", "wc",
+        "env", "echo", "whoami", "ps", "pstree", "dmesg",
+        "lscpu", "lshw", "lsblk", "mount", "ufw",
+        "systemctl", "journalctl", "last", "du", "sensors",
+        "iostat", "vmstat", "top", "whois", "dig", "nslookup",
+        "curl", "wget", "traceroute", "mtr", "netstat",
+        "lsusb", "lspci", "hwinfo", "dmidecode", "passwd",
+        "id", "groups", "crontab", "stat", "file",
+    ]
+        .iter()
+        .cloned()
+        .collect();
 
     match mode {
         "gen" => {
@@ -69,18 +102,18 @@ fn main() -> Result<()> {
                 }
             }
 
-            let (train_data, valid_data) = corpus.split();
+            let (train_set, valid_set) = corpus.split();
 
-            let (train_in, train_out) = generate(&train_data, &tokenizer, length, &device)?;
-            let (valid_in, valid_out) = generate(&valid_data, &tokenizer, length, &device)?;
+            let (train_in, train_out) = generate(&train_set, &tokenizer, length, &device)?;
+            let (valid_in, valid_out) = generate(&valid_set, &tokenizer, length, &device)?;
 
             let config = Config {
                 vocab: tokenizer.size(),
-                dim: 128,
-                heads: 4,
-                layers: 2,
-                limit: 256,
-                drop: 0.4,
+                dim: 512,
+                heads: 8,
+                layers: 8,
+                limit: 512,
+                drop: 0.1,
             };
 
             config.save("config.json");
@@ -108,6 +141,31 @@ fn main() -> Result<()> {
                     break;
                 }
 
+                if query.eq_ignore_ascii_case("train") {
+                    let mut map = VarMap::new();
+                    if std::path::Path::new("weights.safetensors").exists() {
+                        map.load("weights.safetensors")?;
+                    }
+
+                    let mut length = 0;
+                    for item in &corpus.items {
+                        let phrase = tokenizer.encode(&item.phrase);
+                        let command = tokenizer.encode(&item.command);
+                        let total = phrase.len() + command.len() + 3;
+                        if total > length {
+                            length = total;
+                        }
+                    }
+
+                    let (train_set, valid_set) = corpus.clone().split();
+                    let (train_in, train_out) = generate(&train_set, &tokenizer, length, &device)?;
+                    let (valid_in, valid_out) = generate(&valid_set, &tokenizer, length, &device)?;
+
+                    train::execute(&train_in, &train_out, &valid_in, &valid_out, &map, &device, &config)?;
+                    println!("training finished");
+                    continue;
+                }
+
                 if query.is_empty() {
                     continue;
                 }
@@ -130,13 +188,18 @@ fn main() -> Result<()> {
 
                 if answer.eq_ignore_ascii_case("y") {
                     let parts: Vec<&str> = text.split_whitespace().collect();
-                    if !parts.is_empty() {
-                        let mut process = Command::new(parts[0]);
-                        if parts.len() > 1 {
-                            process.args(&parts[1..]);
-                        }
-                        process.status().unwrap();
+                    if parts.is_empty() {
+                        continue;
                     }
+                    if !allowlist.contains(parts[0]) {
+                        println!("sylvie: command blocked for safety");
+                        continue;
+                    }
+                    let mut process = Command::new(parts[0]);
+                    if parts.len() > 1 {
+                        process.args(&parts[1..]);
+                    }
+                    process.status().unwrap();
                 } else if !answer.eq_ignore_ascii_case("n") && !answer.is_empty() {
                     corpus.items.push(data::Record {
                         phrase: query.to_string(),

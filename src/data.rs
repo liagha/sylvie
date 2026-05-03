@@ -26,10 +26,28 @@ impl Corpus {
     }
 
     pub fn split(mut self) -> (Self, Self) {
+        let total = self.items.len();
+        if total == 0 {
+            return (Self { items: vec![] }, Self { items: vec![] });
+        }
+
         let mut gen = rng();
         self.items.shuffle(&mut gen);
-        let point = (self.items.len() as f32 * 0.9) as usize;
-        let valid = self.items.split_off(point);
-        (Self { items: self.items }, Self { items: valid })
+
+        if total == 1 {
+            let item = self.items[0].clone();
+            return (
+                Self { items: vec![item.clone()] },
+                Self { items: vec![item] },
+            );
+        }
+
+        let point = (total as f32 * 0.9) as usize;
+        let point = if point == 0 { 1 } else { point.min(total - 1) };
+        let valid_items = self.items.split_off(point);
+        (
+            Self { items: self.items },
+            Self { items: valid_items },
+        )
     }
 }

@@ -1,3 +1,4 @@
+// FILE: src/tokens.rs
 use std::fs;
 use std::io::Write;
 use tokenizers::{
@@ -16,7 +17,7 @@ pub struct Tokenizer {
 impl Tokenizer {
     pub fn train(iterator: impl IntoIterator<Item = String>) -> Self {
         let mut trainer = BpeTrainer::builder()
-            .vocab_size(1000)
+            .vocab_size(4000)
             .show_progress(false)
             .special_tokens(vec![
                 AddedToken::from(String::from("<pad>"), true),
