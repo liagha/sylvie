@@ -1,6 +1,6 @@
 mod config;
 mod data;
-mod gen;
+mod generate;
 mod infer;
 mod message;
 mod model;
@@ -98,7 +98,7 @@ fn main() -> Result<()> {
 
     match mode {
         "gen" => {
-            gen::execute();
+            generate::execute();
         }
         "train" => {
             let corpus = Corpus::load("dataset.json");
