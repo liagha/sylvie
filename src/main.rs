@@ -2,6 +2,7 @@ mod config;
 mod data;
 mod gen;
 mod infer;
+mod message;
 mod model;
 mod tokens;
 mod train;
@@ -10,6 +11,7 @@ use candle_core::{Device, Result, Tensor};
 use candle_nn::VarMap;
 use config::Config;
 use data::Corpus;
+use message::Message;
 use std::collections::HashSet;
 use std::env;
 use std::io::{self, BufRead, Write};
@@ -29,14 +31,14 @@ fn generate(
     for item in &corpus.items {
         let mut row = Vec::with_capacity(length);
         row.push(1);
-        row.extend(tokenizer.encode(&item.phrase));
+        row.extend(tokenizer.encode(&item.phrase.to_string()));
         row.push(3);
-        row.extend(tokenizer.encode(&item.command));
+        row.extend(tokenizer.encode(&item.command.to_string()));
         row.push(2);
 
         let mut mask_row = vec![0.0f32; length];
-        let sep_pos = 1 + tokenizer.encode(&item.phrase).len();
-        let eos_pos = sep_pos + 1 + tokenizer.encode(&item.command).len();
+        let sep_pos = 1 + tokenizer.encode(&item.phrase.to_string()).len();
+        let eos_pos = sep_pos + 1 + tokenizer.encode(&item.command.to_string()).len();
         for i in sep_pos + 1..=eos_pos {
             if i < length {
                 mask_row[i] = 1.0;
@@ -106,7 +108,7 @@ fn main() -> Result<()> {
                 let texts = corpus
                     .items
                     .iter()
-                    .flat_map(|item| vec![item.phrase.clone(), item.command.clone()]);
+                    .flat_map(|item| vec![item.phrase.to_string(), item.command.to_string()]);
                 let tokenizer = Tokenizer::train(texts);
                 tokenizer.save("tokenizer.json");
                 tokenizer
@@ -114,8 +116,8 @@ fn main() -> Result<()> {
 
             let mut length = 0;
             for item in &corpus.items {
-                let phrase = tokenizer.encode(&item.phrase);
-                let command = tokenizer.encode(&item.command);
+                let phrase = tokenizer.encode(&item.phrase.to_string());
+                let command = tokenizer.encode(&item.command.to_string());
                 let total = phrase.len() + command.len() + 3;
                 if total > length {
                     length = total;
@@ -167,10 +169,10 @@ fn main() -> Result<()> {
 
             loop {
                 print!("query: ");
-                io::stdout().flush().unwrap();
+                io::stdout().flush()?;
 
                 let mut query = String::new();
-                handle.read_line(&mut query).unwrap();
+                handle.read_line(&mut query)?;
                 let query = query.trim();
 
                 if query.eq_ignore_ascii_case("quit") || query.eq_ignore_ascii_case("exit") {
@@ -186,8 +188,8 @@ fn main() -> Result<()> {
 
                     let mut length = 0;
                     for item in &corpus.items {
-                        let phrase = tokenizer.encode(&item.phrase);
-                        let command = tokenizer.encode(&item.command);
+                        let phrase = tokenizer.encode(&item.phrase.to_string());
+                        let command = tokenizer.encode(&item.command.to_string());
                         let total = phrase.len() + command.len() + 3;
                         if total > length {
                             length = total;
@@ -221,44 +223,63 @@ fn main() -> Result<()> {
 
                 let mut encoded = Vec::new();
                 encoded.push(1);
-                encoded.extend(tokenizer.encode(query));
+                let phrase = Message::Text(query.to_string());
+                encoded.extend(tokenizer.encode(&phrase.to_string()));
                 encoded.push(3);
 
                 let output = infer::execute(&encoded, &device, &config)?;
                 let text = tokenizer.decode(&output);
 
-                println!("sylvie: {}", text);
-                print!("feedback (y/n/command): ");
-                io::stdout().flush().unwrap();
+                let message: Message = match text.parse() {
+                    Ok(m) => m,
+                    Err(_) => {
+                        println!("sylvie (raw): {}", text);
+                        Message::Text(text.clone())
+                    }
+                };
 
-                let mut answer = String::new();
-                handle.read_line(&mut answer).unwrap();
-                let answer = answer.trim();
+                println!("sylvie: {}", message.to_string());
 
-                if answer.eq_ignore_ascii_case("y") {
-                    let parts: Vec<&str> = text.split_whitespace().collect();
-                    if parts.is_empty() {
-                        continue;
+                match &message {
+                    Message::Command(cmd) => {
+                        print!("execute? (y/n/override): ");
+                        io::stdout().flush()?;
+                        let mut answer = String::new();
+                        handle.read_line(&mut answer)?;
+                        let answer = answer.trim();
+
+                        if answer.eq_ignore_ascii_case("y") {
+                            let parts: Vec<&str> = cmd.split_whitespace().collect();
+                            if parts.is_empty() {
+                                continue;
+                            }
+                            if !allowlist.contains(parts[0]) {
+                                println!("blocked for safety");
+                                continue;
+                            }
+                            let args: Vec<&str> = if parts.len() > 1 {
+                                parts[1..].to_vec()
+                            } else {
+                                vec![]
+                            };
+                            let mut process = Command::new(parts[0]);
+                            if !args.is_empty() {
+                                process.args(&args);
+                            }
+                            process.status()?;
+                        } else if !answer.eq_ignore_ascii_case("n") && !answer.is_empty() {
+                            corpus.items.push(data::Record {
+                                phrase: Message::Text(query.to_string()),
+                                command: Message::Command(answer.to_string()),
+                            });
+                        }
                     }
-                    if !allowlist.contains(parts[0]) {
-                        println!("sylvie: command blocked for safety");
-                        continue;
+                    Message::Trigger(name) => {
+                        println!("trigger '{}' not implemented yet", name);
                     }
-                    let args: Vec<&str> = if parts.len() > 1 {
-                        parts[1..].to_vec()
-                    } else {
-                        vec![]
-                    };
-                    let mut process = Command::new(parts[0]);
-                    if !args.is_empty() {
-                        process.args(&args);
+                    Message::Text(txt) => {
+                        println!("sylvie says: {}", txt);
                     }
-                    process.status().unwrap();
-                } else if !answer.eq_ignore_ascii_case("n") && !answer.is_empty() {
-                    corpus.items.push(data::Record {
-                        phrase: query.to_string(),
-                        command: answer.to_string(),
-                    });
                 }
             }
         }

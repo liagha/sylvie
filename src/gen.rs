@@ -1,4 +1,5 @@
 use crate::data::{Corpus, Record};
+use crate::message::Message;
 use std::collections::HashSet;
 use std::fs;
 
@@ -106,10 +107,11 @@ pub fn execute() {
     for (phrases, command) in templates {
         for phrase in phrases {
             let record = Record {
-                phrase: phrase.to_string(),
-                command: command.to_string(),
+                phrase: Message::Text(phrase.to_string()),
+                command: Message::Command(command.to_string()),
             };
-            if seen.insert((record.phrase.clone(), record.command.clone())) {
+            let key = (format!("{}", record.phrase), format!("{}", record.command));
+            if seen.insert(key) {
                 corpus.items.push(record);
             }
         }

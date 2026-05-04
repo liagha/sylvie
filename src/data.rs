@@ -1,3 +1,4 @@
+use crate::message::Message;
 use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
@@ -6,8 +7,8 @@ use rand::SeedableRng;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Record {
-    pub phrase: String,
-    pub command: String,
+    pub phrase: Message,
+    pub command: Message,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -31,10 +32,8 @@ impl Corpus {
         if total == 0 {
             return (Self { items: vec![] }, Self { items: vec![] });
         }
-
         let mut rng = SmallRng::seed_from_u64(42);
         self.items.shuffle(&mut rng);
-
         if total == 1 {
             let item = self.items[0].clone();
             return (
@@ -42,7 +41,6 @@ impl Corpus {
                 Self { items: vec![item] },
             );
         }
-
         let point = (total as f32 * 0.9) as usize;
         let point = if point == 0 { 1 } else { point.min(total - 1) };
         let valid_items = self.items.split_off(point);
