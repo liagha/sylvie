@@ -1,4 +1,3 @@
-// FILE: src/infer.rs
 use crate::config::Config;
 use crate::model::Network;
 use candle_core::{Device, Result, Tensor};
@@ -25,6 +24,8 @@ pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u3
     let limit = 64;
     let mut processor = LogitsProcessor::new(42, Some(0.7), Some(0.9));
 
+    let forbidden = [0u32, 1, 3, 4];
+
     for _ in 0..limit {
         let length = sequence.len();
         let tensor = Tensor::from_vec(sequence.clone(), (1, length), device)?;
@@ -36,8 +37,11 @@ pub fn execute(input: &[u32], device: &Device, config: &Config) -> Result<Vec<u3
             .squeeze(0)?;
         let mut array = last.to_vec1::<f32>()?;
 
-        array[0] = f32::NEG_INFINITY;
-        array[1] = f32::NEG_INFINITY;
+        for &id in &forbidden {
+            if (id as usize) < array.len() {
+                array[id as usize] = f32::NEG_INFINITY;
+            }
+        }
 
         let masked = Tensor::from_vec(array, config.vocab, device)?;
         let index = processor.sample(&masked)?;

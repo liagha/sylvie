@@ -1,7 +1,8 @@
-use rand::rng;
+use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use rand::SeedableRng;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Record {
@@ -31,8 +32,8 @@ impl Corpus {
             return (Self { items: vec![] }, Self { items: vec![] });
         }
 
-        let mut gen = rng();
-        self.items.shuffle(&mut gen);
+        let mut rng = SmallRng::seed_from_u64(42);
+        self.items.shuffle(&mut rng);
 
         if total == 1 {
             let item = self.items[0].clone();

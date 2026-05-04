@@ -1,4 +1,3 @@
-// FILE: src/train.rs
 use crate::config::Config;
 use crate::model::Network;
 use candle_core::{Device, Result, Tensor, D};
@@ -8,8 +7,10 @@ use rand::seq::SliceRandom;
 pub fn execute(
     train_in: &Tensor,
     train_out: &Tensor,
+    train_mask: &Tensor,
     valid_in: &Tensor,
     valid_out: &Tensor,
+    valid_mask: &Tensor,
     map: &VarMap,
     device: &Device,
     config: &Config,
@@ -32,10 +33,12 @@ pub fn execute(
     let (train_rows, train_cols) = train_in.dims2()?;
     let train_inputs = train_in.narrow(1, 0, train_cols - 1)?.contiguous()?;
     let train_targets = train_out.narrow(1, 1, train_cols - 1)?.contiguous()?;
+    let train_mask = train_mask.narrow(1, 1, train_cols - 1)?.contiguous()?;
 
     let (_valid_rows, valid_cols) = valid_in.dims2()?;
     let valid_inputs = valid_in.narrow(1, 0, valid_cols - 1)?.contiguous()?;
     let valid_targets = valid_out.narrow(1, 1, valid_cols - 1)?.contiguous()?;
+    let valid_mask = valid_mask.narrow(1, 1, valid_cols - 1)?.contiguous()?;
 
     let batch = 16;
     let mut gen = rand::rng();
@@ -59,6 +62,9 @@ pub fn execute(
             let batch_targets = train_targets
                 .index_select(&tensor_indices, 0)?
                 .flatten_all()?;
+            let batch_mask = train_mask
+                .index_select(&tensor_indices, 0)?
+                .flatten_all()?;
 
             let predictions = network.forward(&batch_inputs, true)?;
             let reshaped = predictions.reshape(((), config.vocab))?;
@@ -66,11 +72,8 @@ pub fn execute(
             let log_probs = ops::log_softmax(&reshaped, D::Minus1)?;
             let gathered = log_probs.gather(&batch_targets.unsqueeze(1)?, 1)?;
             let nll = gathered.neg()?.squeeze(1)?;
-            let mask = batch_targets
-                .ne(0u32)?
-                .to_dtype(candle_core::DType::F32)?;
-            let masked = nll.broadcast_mul(&mask)?;
-            let valid = mask.sum_all()?;
+            let masked = nll.broadcast_mul(&batch_mask)?;
+            let valid = batch_mask.sum_all()?;
             let error = masked.sum_all()?.broadcast_div(&valid)?;
 
             optimizer.backward_step(&error)?;
@@ -83,15 +86,13 @@ pub fn execute(
         let valid_preds = network.forward(&valid_inputs, false)?;
         let valid_reshaped = valid_preds.reshape(((), config.vocab))?;
         let valid_targets_flat = valid_targets.flatten_all()?;
+        let valid_mask_flat = valid_mask.flatten_all()?;
 
         let valid_log_probs = ops::log_softmax(&valid_reshaped, D::Minus1)?;
         let valid_gathered = valid_log_probs.gather(&valid_targets_flat.unsqueeze(1)?, 1)?;
         let valid_nll = valid_gathered.neg()?.squeeze(1)?;
-        let valid_mask = valid_targets_flat
-            .ne(0u32)?
-            .to_dtype(candle_core::DType::F32)?;
-        let valid_masked = valid_nll.broadcast_mul(&valid_mask)?;
-        let valid_count = valid_mask.sum_all()?;
+        let valid_masked = valid_nll.broadcast_mul(&valid_mask_flat)?;
+        let valid_count = valid_mask_flat.sum_all()?;
         let valid_value = valid_masked
             .sum_all()?
             .broadcast_div(&valid_count)?
@@ -109,10 +110,6 @@ pub fn execute(
                 println!("early stop");
                 break;
             }
-        }
-
-        if average < 0.10 {
-            break;
         }
     }
 

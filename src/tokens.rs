@@ -1,14 +1,15 @@
-// FILE: src/tokens.rs
 use std::fs;
 use std::io::Write;
-use tokenizers::{
-    decoders::DecoderWrapper,
-    models::bpe::{BpeTrainer, BPE},
-    normalizers::{Lowercase, NormalizerWrapper, Sequence, Strip},
-    pre_tokenizers::{whitespace::Whitespace, PreTokenizerWrapper},
-    processors::PostProcessorWrapper,
-    AddedToken, Tokenizer as Engine, TokenizerImpl,
-};
+use tokenizers::decoders::byte_level::ByteLevel as ByteLevelDecoder;
+use tokenizers::decoders::DecoderWrapper;
+use tokenizers::models::bpe::{BpeTrainer, BPE};
+use tokenizers::normalizers::{NormalizerWrapper, Sequence, Strip};
+use tokenizers::pre_tokenizers::byte_level::ByteLevel;
+use tokenizers::pre_tokenizers::PreTokenizerWrapper;
+use tokenizers::processors::PostProcessorWrapper;
+use tokenizers::AddedToken;
+use tokenizers::Tokenizer as Engine;
+use tokenizers::TokenizerImpl;
 
 pub struct Tokenizer {
     engine: Engine,
@@ -24,6 +25,7 @@ impl Tokenizer {
                 AddedToken::from(String::from("<bos>"), true),
                 AddedToken::from(String::from("<eos>"), true),
                 AddedToken::from(String::from("<sep>"), true),
+                AddedToken::from(String::from("<unk>"), true),
             ])
             .build();
 
@@ -36,9 +38,10 @@ impl Tokenizer {
         > = TokenizerImpl::new(BPE::default());
 
         let _ = engine.with_normalizer(
-            Sequence::new(vec![Strip::new(true, true).into(), Lowercase.into()]).into(),
+            Sequence::new(vec![Strip::new(true, true).into()]).into(),
         );
-        let _ = engine.with_pre_tokenizer(Whitespace.into());
+        let _ = engine.with_pre_tokenizer(ByteLevel::default().into());
+        let _ = engine.with_decoder(ByteLevelDecoder::default().into());
 
         let temp = "temp.txt";
         let mut file = fs::File::create(temp).unwrap();

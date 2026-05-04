@@ -1,4 +1,3 @@
-// FILE: src/main.rs
 mod config;
 mod data;
 mod gen;
@@ -17,28 +16,46 @@ use std::io::{self, BufRead, Write};
 use std::process::Command;
 use tokens::Tokenizer;
 
-fn generate(corpus: &Corpus, tokenizer: &Tokenizer, length: usize, device: &Device) -> Result<(Tensor, Tensor)> {
-    let mut sequences = Vec::new();
+fn generate(
+    corpus: &Corpus,
+    tokenizer: &Tokenizer,
+    length: usize,
+    device: &Device,
+) -> Result<(Tensor, Tensor, Tensor)> {
     let count = corpus.items.len();
+    let mut sequences = Vec::with_capacity(count * length);
+    let mut masks = Vec::with_capacity(count * length);
 
     for item in &corpus.items {
-        let mut row = Vec::new();
+        let mut row = Vec::with_capacity(length);
         row.push(1);
         row.extend(tokenizer.encode(&item.phrase));
         row.push(3);
         row.extend(tokenizer.encode(&item.command));
         row.push(2);
 
+        let mut mask_row = vec![0.0f32; length];
+        let sep_pos = 1 + tokenizer.encode(&item.phrase).len();
+        let eos_pos = sep_pos + 1 + tokenizer.encode(&item.command).len();
+        for i in sep_pos + 1..=eos_pos {
+            if i < length {
+                mask_row[i] = 1.0;
+            }
+        }
+
         while row.len() < length {
             row.push(0);
         }
+
         sequences.extend(row);
+        masks.extend(mask_row);
     }
 
     let inputs = Tensor::from_vec(sequences.clone(), (count, length), device)?;
     let targets = Tensor::from_vec(sequences, (count, length), device)?;
+    let mask = Tensor::from_vec(masks, (count, length), device)?;
 
-    Ok((inputs, targets))
+    Ok((inputs, targets, mask))
 }
 
 fn pick_device() -> Device {
@@ -82,15 +99,18 @@ fn main() -> Result<()> {
             gen::execute();
         }
         "train" => {
-            let map = VarMap::new();
             let corpus = Corpus::load("dataset.json");
-
-            let texts = corpus
-                .items
-                .iter()
-                .flat_map(|item| vec![item.phrase.clone(), item.command.clone()]);
-            let tokenizer = Tokenizer::train(texts);
-            tokenizer.save("tokenizer.json");
+            let tokenizer = if std::path::Path::new("tokenizer.json").exists() {
+                Tokenizer::load("tokenizer.json")
+            } else {
+                let texts = corpus
+                    .items
+                    .iter()
+                    .flat_map(|item| vec![item.phrase.clone(), item.command.clone()]);
+                let tokenizer = Tokenizer::train(texts);
+                tokenizer.save("tokenizer.json");
+                tokenizer
+            };
 
             let mut length = 0;
             for item in &corpus.items {
@@ -104,8 +124,10 @@ fn main() -> Result<()> {
 
             let (train_set, valid_set) = corpus.split();
 
-            let (train_in, train_out) = generate(&train_set, &tokenizer, length, &device)?;
-            let (valid_in, valid_out) = generate(&valid_set, &tokenizer, length, &device)?;
+            let (train_in, train_out, train_mask) =
+                generate(&train_set, &tokenizer, length, &device)?;
+            let (valid_in, valid_out, valid_mask) =
+                generate(&valid_set, &tokenizer, length, &device)?;
 
             let config = Config {
                 vocab: tokenizer.size(),
@@ -118,7 +140,22 @@ fn main() -> Result<()> {
 
             config.save("config.json");
 
-            train::execute(&train_in, &train_out, &valid_in, &valid_out, &map, &device, &config)?;
+            let mut map = VarMap::new();
+            if std::path::Path::new("weights.safetensors").exists() {
+                map.load("weights.safetensors")?;
+            }
+
+            train::execute(
+                &train_in,
+                &train_out,
+                &train_mask,
+                &valid_in,
+                &valid_out,
+                &valid_mask,
+                &map,
+                &device,
+                &config,
+            )?;
         }
         "infer" => {
             let tokenizer = Tokenizer::load("tokenizer.json");
@@ -158,10 +195,22 @@ fn main() -> Result<()> {
                     }
 
                     let (train_set, valid_set) = corpus.clone().split();
-                    let (train_in, train_out) = generate(&train_set, &tokenizer, length, &device)?;
-                    let (valid_in, valid_out) = generate(&valid_set, &tokenizer, length, &device)?;
+                    let (train_in, train_out, train_mask) =
+                        generate(&train_set, &tokenizer, length, &device)?;
+                    let (valid_in, valid_out, valid_mask) =
+                        generate(&valid_set, &tokenizer, length, &device)?;
 
-                    train::execute(&train_in, &train_out, &valid_in, &valid_out, &map, &device, &config)?;
+                    train::execute(
+                        &train_in,
+                        &train_out,
+                        &train_mask,
+                        &valid_in,
+                        &valid_out,
+                        &valid_mask,
+                        &map,
+                        &device,
+                        &config,
+                    )?;
                     println!("training finished");
                     continue;
                 }
@@ -195,9 +244,14 @@ fn main() -> Result<()> {
                         println!("sylvie: command blocked for safety");
                         continue;
                     }
+                    let args: Vec<&str> = if parts.len() > 1 {
+                        parts[1..].to_vec()
+                    } else {
+                        vec![]
+                    };
                     let mut process = Command::new(parts[0]);
-                    if parts.len() > 1 {
-                        process.args(&parts[1..]);
+                    if !args.is_empty() {
+                        process.args(&args);
                     }
                     process.status().unwrap();
                 } else if !answer.eq_ignore_ascii_case("n") && !answer.is_empty() {
