@@ -44,7 +44,20 @@ fn target(
 }
 
 fn transport(error: reqwest::Error) -> Error {
-    Error::Internal(format!("connection failed: {error}"))
+    let detail = if error.is_builder() {
+        "malformed request".to_string()
+    } else if error.is_connect() {
+        "cannot reach the server (connection refused)".to_string()
+    } else if error.is_timeout() {
+        "the server took too long to respond".to_string()
+    } else if error.is_redirect() {
+        "unexpected redirect from the server".to_string()
+    } else if error.is_body() || error.is_decode() {
+        "could not read the server reply".to_string()
+    } else {
+        format!("connection failed: {error}")
+    };
+    Error::Internal(detail)
 }
 
 async fn deliver<R: DeserializeOwned>(response: Response) -> Result<R, Error> {

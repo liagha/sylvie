@@ -1,3 +1,7 @@
+// dashboard scripting: drives the sylvie-web wasm to register, unlock, and
+// manage vault items from the browser, turning server and crypto errors into
+// readable messages.
+
 import init, {
     start_registration, finish_registration,
     start_login, finish_login, open_login,
@@ -10,7 +14,33 @@ const TOKEN = "sylvie_token";
 function el(id) { return document.getElementById(id); }
 
 function fail(node, error) {
-    if (node) node.textContent = String(error);
+    if (!node) return;
+    node.textContent = error && error.message ? error.message : String(error);
+}
+
+function describe(code) {
+    const known = {
+        bad_request: "malformed request",
+        unauthorized: "authentication required",
+        forbidden: "insufficient rights",
+        not_found: "missing resource",
+        conflict: "resource already exists",
+        too_large: "payload exceeds limit",
+        rate_limited: "too many attempts",
+        crypto: "cryptographic failure",
+        protocol: "protocol violation",
+        internal: "server error",
+    };
+    return known[code] || code;
+}
+
+function explain(raw, status) {
+    try {
+        const data = JSON.parse(raw);
+        if (data && typeof data.error === "string") return describe(data.error);
+    } catch {}
+    if (!raw) return `request failed (${status})`;
+    return raw;
 }
 
 function setCookie(token) {
@@ -28,7 +58,7 @@ async function api(method, path, body, raw) {
         }
     }
     const res = await fetch(path, opt);
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw explain(await res.text(), res.status);
     const type = res.headers.get("content-type") || "";
     if (type.includes("application/json")) return await res.json();
     return res;
