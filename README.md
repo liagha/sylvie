@@ -28,6 +28,15 @@ migrations/      SQL migrations
 docs/            architecture.md · protocol.md · security.md
 ```
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liagha/sylvie/main/deploy/install-client.sh | bash   # sylvie CLI
+curl -fsSL https://raw.githubusercontent.com/liagha/sylvie/main/deploy/install-server.sh | bash   # sylver server
+```
+
+Or build from source:
+
 ## Build
 
 ```bash

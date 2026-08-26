@@ -5,11 +5,12 @@ One account, unlimited devices, each revocable with `sylvie device revoke`.
 ## Desktop (Linux / macOS)
 
 ```bash
-cargo install --git https://github.com/liagha/sylvie --bin sylvie
-# or grab a prebuilt Linux binary from GitHub Releases
+curl -fsSL https://raw.githubusercontent.com/liagha/sylvie/main/deploy/install-client.sh | bash
 sylvie register --url https://hub.example.com --user <you>   # first machine only
 sylvie login    --url https://hub.example.com --user <you>   # every other machine
 ```
+
+No Linux x86_64? The script falls back to `cargo install` automatically.
 
 ## Android (Termux) — full client today
 
