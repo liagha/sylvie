@@ -1,4 +1,7 @@
-use reqwest::{Client, Response, StatusCode};
+// http client: talks to the hub api, fixing the server url so a bare host
+// or a stray www. still reaches the right endpoint over https.
+
+use reqwest::{Client, Method, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +16,31 @@ pub fn http() -> Result<Client, Error> {
     Client::builder()
         .build()
         .map_err(|e| Error::Internal(e.to_string()))
+}
+
+fn normalize(raw: String) -> String {
+    let mut url = raw.trim().to_string();
+    for prefix in ["https://www.", "http://www.", "www."] {
+        if let Some(stripped) = url.strip_prefix(prefix) {
+            url = stripped.to_string();
+            break;
+        }
+    }
+    if !url.contains("://") {
+        url = format!("https://{url}");
+    }
+    url.trim_end_matches('/').to_string()
+}
+
+fn target(
+    client: &Client,
+    method: Method,
+    base: &str,
+    path: &str,
+    token: Option<&str>,
+) -> reqwest::RequestBuilder {
+    let url = format!("{}{}", normalize(base.to_string()), path);
+    bearer(client.request(method, url), token)
 }
 
 fn transport(error: reqwest::Error) -> Error {
@@ -55,7 +83,7 @@ pub async fn post<B: Serialize, R: DeserializeOwned>(
     token: Option<&str>,
     body: &B,
 ) -> Result<R, Error> {
-    let request = bearer(client.post(format!("{base}{path}")), token);
+    let request = target(client, Method::POST, base, path, token);
     deliver(request.json(body).send().await.map_err(transport)?).await
 }
 
@@ -66,7 +94,7 @@ pub async fn post_raw<R: DeserializeOwned>(
     token: Option<&str>,
     body: Vec<u8>,
 ) -> Result<R, Error> {
-    let request = bearer(client.post(format!("{base}{path}")), token);
+    let request = target(client, Method::POST, base, path, token);
     deliver(request.body(body).send().await.map_err(transport)?).await
 }
 
@@ -77,7 +105,7 @@ pub async fn put<B: Serialize, R: DeserializeOwned>(
     token: Option<&str>,
     body: &B,
 ) -> Result<R, Error> {
-    let request = bearer(client.put(format!("{base}{path}")), token);
+    let request = target(client, Method::PUT, base, path, token);
     deliver(request.json(body).send().await.map_err(transport)?).await
 }
 
@@ -87,7 +115,7 @@ pub async fn get<R: DeserializeOwned>(
     path: &str,
     token: Option<&str>,
 ) -> Result<R, Error> {
-    let request = bearer(client.get(format!("{base}{path}")), token);
+    let request = target(client, Method::GET, base, path, token);
     deliver(request.send().await.map_err(transport)?).await
 }
 
@@ -97,7 +125,7 @@ pub async fn remove(
     path: &str,
     token: Option<&str>,
 ) -> Result<(), Error> {
-    let request = bearer(client.delete(format!("{base}{path}")), token);
+    let request = target(client, Method::DELETE, base, path, token);
     deliver(request.send().await.map_err(transport)?).await
 }
 
@@ -107,7 +135,7 @@ pub async fn bytes(
     path: &str,
     token: Option<&str>,
 ) -> Result<Vec<u8>, Error> {
-    let request = bearer(client.get(format!("{base}{path}")), token);
+    let request = target(client, Method::GET, base, path, token);
     let response = request.send().await.map_err(transport)?;
     let status = response.status();
     if !status.is_success() {

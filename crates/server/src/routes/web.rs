@@ -11,7 +11,10 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Form, Router};
-use pardeh::{Node, Signals, a, button, div, form, h1, input, script, span, table, textarea, tbody, td, th, tr};
+use pardeh::{
+    Node, Signals, a, button, div, form, h1, input, script, span, table, tbody, td, textarea, th,
+    tr,
+};
 
 use sqlx::SqlitePool;
 
@@ -100,8 +103,13 @@ fn file_region(key: &'static str, empty: &'static str) -> impl Fn(&Signals) -> N
             }))
         };
         table()
-            .kid(tr().kid(th()).kid(th()).kid(th()).kid(th())
-                .kid(th().text("")))
+            .kid(
+                tr().kid(th())
+                    .kid(th())
+                    .kid(th())
+                    .kid(th())
+                    .kid(th().text("")),
+            )
             .kid(tbody().kid(body))
     }
 }
@@ -152,20 +160,19 @@ textarea { resize: vertical; min-height: 3.2rem }
 "#;
 
 fn app_script() -> Node {
-    script().attr("type", "module").attr("src", "/assets/shell.js")
+    script()
+        .attr("type", "module")
+        .attr("src", "/assets/shell.js")
 }
 
 fn field(label: &str, name: &str, kind: &str, placeholder: &str) -> Node {
-    div()
-        .class("field")
-        .kid(span().text(label))
-        .kid(
-            input()
-                .attr("type", kind)
-                .attr("name", name)
-                .attr("placeholder", placeholder)
-                .attr("autocomplete", "off"),
-        )
+    div().class("field").kid(span().text(label)).kid(
+        input()
+            .attr("type", kind)
+            .attr("name", name)
+            .attr("placeholder", placeholder)
+            .attr("autocomplete", "off"),
+    )
 }
 
 fn dashboard(signals: &Signals) -> Node {
@@ -205,51 +212,71 @@ fn dashboard(signals: &Signals) -> Node {
 }
 
 fn secret_tools() -> Node {
-    div().class("tools").kid(
-        form()
-            .attr("id", "secret-get")
-            .attr("class", "row")
-            .kid(input().attr("type", "text").attr("name", "name").attr("placeholder", "name to read"))
-            .kid(button().attr("type", "submit").text("get")),
-    )
-    .kid(
-        form()
-            .attr("id", "secret-set")
-            .attr("class", "tools")
-            .kid(input().attr("type", "text").attr("name", "name").attr("placeholder", "name to store"))
-            .kid(textarea().attr("name", "value").attr("placeholder", "value (prompted for password)"))
-            .kid(div().class("err").attr("id", "secret-msg").text("")),
-    )
+    div()
+        .class("tools")
+        .kid(
+            form()
+                .attr("id", "secret-get")
+                .attr("class", "row")
+                .kid(
+                    input()
+                        .attr("type", "text")
+                        .attr("name", "name")
+                        .attr("placeholder", "name to read"),
+                )
+                .kid(button().attr("type", "submit").text("get")),
+        )
+        .kid(
+            form()
+                .attr("id", "secret-set")
+                .attr("class", "tools")
+                .kid(
+                    input()
+                        .attr("type", "text")
+                        .attr("name", "name")
+                        .attr("placeholder", "name to store"),
+                )
+                .kid(
+                    textarea()
+                        .attr("name", "value")
+                        .attr("placeholder", "value (prompted for password)"),
+                )
+                .kid(div().class("err").attr("id", "secret-msg").text("")),
+        )
 }
 
 fn file_tools() -> Node {
-    div().class("tools").kid(
-        form()
-            .attr("id", "file-upload")
-            .attr("class", "row")
-            .kid(input().attr("type", "file").attr("name", "file"))
-            .kid(button().attr("type", "submit").text("upload")),
-    )
-    .kid(div().class("err").attr("id", "file-msg").text(""))
+    div()
+        .class("tools")
+        .kid(
+            form()
+                .attr("id", "file-upload")
+                .attr("class", "row")
+                .kid(input().attr("type", "file").attr("name", "file"))
+                .kid(button().attr("type", "submit").text("upload")),
+        )
+        .kid(div().class("err").attr("id", "file-msg").text(""))
 }
 
 fn passwd_card() -> Node {
-    div().class("card").kid(
-        div()
-            .class("head")
-            .kid(h1().text("account"))
-            .kid(div().class("tools"))
-            .kid(logout_form()),
-    )
-    .kid(
-        form()
-            .attr("id", "passwd")
-            .attr("class", "tools")
-            .kid(field("current password", "old", "password", ""))
-            .kid(field("new password (min 8)", "new", "password", ""))
-            .kid(button().attr("type", "submit").text("change password"))
-            .kid(div().class("err").attr("id", "passwd-msg").text("")),
-    )
+    div()
+        .class("card")
+        .kid(
+            div()
+                .class("head")
+                .kid(h1().text("account"))
+                .kid(div().class("tools"))
+                .kid(logout_form()),
+        )
+        .kid(
+            form()
+                .attr("id", "passwd")
+                .attr("class", "tools")
+                .kid(field("current password", "old", "password", ""))
+                .kid(field("new password (min 8)", "new", "password", ""))
+                .kid(button().attr("type", "submit").text("change password"))
+                .kid(div().class("err").attr("id", "passwd-msg").text("")),
+        )
 }
 
 fn logout_form() -> Node {
@@ -262,57 +289,74 @@ fn logout_form() -> Node {
 
 fn login_body() -> Node {
     div().kid(styles()).kid(app_script()).kid(
-        div().class("login").kid(
-            div().class("card")
-                .kid(div().class("head").kid(h1().text("create account")))
-                .kid(
-                    form()
-                        .attr("id", "form-register")
-                        .kid(field("username", "user", "text", "you"))
-                        .kid(field("password", "password", "password", "min 8 characters"))
-                        .kid(field("device name", "name", "text", "this browser"))
-                        .kid(
-                            div().class("field")
-                                .kid(button().attr("type", "submit").text("create account")),
-                        ),
-                )
-                .kid(div().class("err").attr("id", "register-msg").text("")),
-        )
-        .kid(
-            div().class("card")
-                .kid(div().class("head").kid(h1().text("unlock with password")))
-                .kid(
-                    form()
-                        .attr("id", "form-login")
-                        .kid(field("username", "user", "text", "you"))
-                        .kid(field("password", "password", "password", ""))
-                        .kid(field("device name", "name", "text", "this browser"))
-                        .kid(
-                            div().class("field")
-                                .kid(button().attr("type", "submit").text("unlock")),
-                        ),
-                )
-                .kid(div().class("err").attr("id", "login-msg").text("")),
-        )
-        .kid(
-            div().class("card")
-                .kid(div().class("head").kid(h1().text("or paste a device token")))
-                .kid(
-                    form()
-                        .attr("method", "post")
-                        .attr("action", "/login")
-                        .kid(input().attr("type", "password").attr("name", "token"))
-                        .kid(
-                            span()
-                                .class("hint")
-                                .text("from `sylvie token` on a device already enrolled"),
-                        )
-                        .kid(
-                            div().class("field")
-                                .kid(button().attr("type", "submit").text("unlock")),
-                        ),
-                ),
-        ),
+        div()
+            .class("login")
+            .kid(
+                div()
+                    .class("card")
+                    .kid(div().class("head").kid(h1().text("create account")))
+                    .kid(
+                        form()
+                            .attr("id", "form-register")
+                            .kid(field("username", "user", "text", "you"))
+                            .kid(field(
+                                "password",
+                                "password",
+                                "password",
+                                "min 8 characters",
+                            ))
+                            .kid(field("device name", "name", "text", "this browser"))
+                            .kid(
+                                div()
+                                    .class("field")
+                                    .kid(button().attr("type", "submit").text("create account")),
+                            ),
+                    )
+                    .kid(div().class("err").attr("id", "register-msg").text("")),
+            )
+            .kid(
+                div()
+                    .class("card")
+                    .kid(div().class("head").kid(h1().text("unlock with password")))
+                    .kid(
+                        form()
+                            .attr("id", "form-login")
+                            .kid(field("username", "user", "text", "you"))
+                            .kid(field("password", "password", "password", ""))
+                            .kid(field("device name", "name", "text", "this browser"))
+                            .kid(
+                                div()
+                                    .class("field")
+                                    .kid(button().attr("type", "submit").text("unlock")),
+                            ),
+                    )
+                    .kid(div().class("err").attr("id", "login-msg").text("")),
+            )
+            .kid(
+                div()
+                    .class("card")
+                    .kid(
+                        div()
+                            .class("head")
+                            .kid(h1().text("or paste a device token")),
+                    )
+                    .kid(
+                        form()
+                            .attr("method", "post")
+                            .attr("action", "/login")
+                            .kid(input().attr("type", "password").attr("name", "token"))
+                            .kid(
+                                span()
+                                    .class("hint")
+                                    .text("from `sylvie token` on a device already enrolled"),
+                            )
+                            .kid(
+                                div()
+                                    .class("field")
+                                    .kid(button().attr("type", "submit").text("unlock")),
+                            ),
+                    ),
+            ),
     )
 }
 
@@ -540,9 +584,7 @@ async fn known_token(db: &sqlx::SqlitePool, token: &str) -> Option<(String, Stri
 }
 
 fn cookie(token: &str) -> HeaderValue {
-    header_value(format!(
-        "{COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/"
-    ))
+    header_value(format!("{COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/"))
 }
 
 fn clear_cookie() -> HeaderValue {
@@ -598,7 +640,8 @@ async fn asset(State(ctx): State<Ctx>, Path(path): Path<String>) -> Response {
     (
         [(
             header::CONTENT_TYPE,
-            HeaderValue::from_str(mime).unwrap_or_else(|_| header::HeaderValue::from_static("application/octet-stream")),
+            HeaderValue::from_str(mime)
+                .unwrap_or_else(|_| header::HeaderValue::from_static("application/octet-stream")),
         )],
         data,
     )

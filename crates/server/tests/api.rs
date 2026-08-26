@@ -49,14 +49,8 @@ async fn spawn_full(max_file: u64, limits: Limits) -> Hub {
     let dir = std::env::temp_dir().join(format!("sylvie-test-{}", uuid::Uuid::new_v4()));
     tokio::fs::create_dir_all(dir.join("files")).await.unwrap();
     let pool = sylver::db::open(&dir.join("test.db")).await.unwrap();
-    let ctx = sylver::ctx::Ctx::build(
-        pool,
-        dir.join("files"),
-        max_file,
-        limits,
-        dir.join("web"),
-    )
-    .await;
+    let ctx =
+        sylver::ctx::Ctx::build(pool, dir.join("files"), max_file, limits, dir.join("web")).await;
     let app = sylver::routes::build(ctx);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -1024,7 +1018,8 @@ async fn web_secrets_and_rekey_flow() {
         .await
         .unwrap();
     let rfin = serde_json::from_str::<serde_json::Value>(
-        &sylvie_web::rekey_finish(handle, rreply["message"].as_str().unwrap(), new_password).unwrap(),
+        &sylvie_web::rekey_finish(handle, rreply["message"].as_str().unwrap(), new_password)
+            .unwrap(),
     )
     .unwrap();
     let status = client

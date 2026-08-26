@@ -27,10 +27,10 @@ type Fail<T> = Result<T, String>;
 pub use {
     derive_vault_impl as derive_vault, drop_session_impl as drop_session,
     finish_login_impl as finish_login, finish_registration_impl as finish_registration,
-    open_login_impl as open_login, open_secret_impl as open_secret, rekey_finish_impl as rekey_finish,
-    rekey_start_impl as rekey_start, rekey_unwrap_impl as rekey_unwrap,
-    seal_secret_impl as seal_secret, start_login_impl as start_login,
-    start_registration_impl as start_registration,
+    open_login_impl as open_login, open_secret_impl as open_secret,
+    rekey_finish_impl as rekey_finish, rekey_start_impl as rekey_start,
+    rekey_unwrap_impl as rekey_unwrap, seal_secret_impl as seal_secret,
+    start_login_impl as start_login, start_registration_impl as start_registration,
 };
 
 struct Session {
@@ -274,8 +274,10 @@ pub fn rekey_finish_impl(handle: u64, response: &str, new_password: &str) -> Fai
 }
 
 fn peek_channel(handle: u64) -> Fail<Vec<u8>> {
-    edit(handle, |session| vault::root(&session.session_key, vault::CHANNEL))
-        .and_then(|inner| inner.map_err(|_| bad("key derivation failed")))
+    edit(handle, |session| {
+        vault::root(&session.session_key, vault::CHANNEL)
+    })
+    .and_then(|inner| inner.map_err(|_| bad("key derivation failed")))
 }
 
 pub fn drop_session_impl(handle: u64) -> Fail<()> {
@@ -351,7 +353,11 @@ mod exports {
     }
 
     #[wasm_bindgen]
-    pub fn rekey_finish(handle: u64, response: &str, new_password: &str) -> Result<String, JsValue> {
+    pub fn rekey_finish(
+        handle: u64,
+        response: &str,
+        new_password: &str,
+    ) -> Result<String, JsValue> {
         rekey_finish_impl(handle, response, new_password).map_err(|error| JsValue::from_str(&error))
     }
 

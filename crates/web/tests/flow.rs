@@ -88,7 +88,8 @@ impl Hub {
 
     fn rekey_start(&self, user: &str, request_b64: &str) -> String {
         let ask = opaque::reg_ask(&codec::decode(request_b64).unwrap()).unwrap();
-        let started = ServerRegistration::<Suite>::start(&self.setup, ask, user.as_bytes()).unwrap();
+        let started =
+            ServerRegistration::<Suite>::start(&self.setup, ask, user.as_bytes()).unwrap();
         codec::encode(&started.message.serialize())
     }
 
@@ -110,7 +111,11 @@ fn rekey_preserves_secrets() {
     let response = hub.register_start("alee", &field(&start, "request"));
     let finished = sylvie_web::finish_registration(handle, &response).unwrap();
     let handle: u64 = field(&finished, "handle").parse().unwrap();
-    hub.register_finish("alee", &field(&finished, "message"), &field(&finished, "wrap"));
+    hub.register_finish(
+        "alee",
+        &field(&finished, "message"),
+        &field(&finished, "wrap"),
+    );
     let _ = sylvie_web::drop_session(handle);
 
     let wrap = hub.wrap_of("alee");
@@ -137,7 +142,11 @@ fn rekey_preserves_secrets() {
     let started = sylvie_web::rekey_start(handle, "second password ok").unwrap();
     let response = hub.rekey_start("alee", &field(&started, "request"));
     let finished = sylvie_web::rekey_finish(handle, &response, "second password ok").unwrap();
-    hub.rekey_finish("alee", &field(&finished, "message"), &field(&finished, "wrap"));
+    hub.rekey_finish(
+        "alee",
+        &field(&finished, "message"),
+        &field(&finished, "wrap"),
+    );
     let _ = sylvie_web::drop_session(handle);
 
     let wrap = hub.wrap_of("alee");
