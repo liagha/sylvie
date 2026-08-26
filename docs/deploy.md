@@ -70,26 +70,6 @@ SYLVIE_VERSION=vX.Y.Z bash -c 'set -e
 
 Migrations run automatically at startup. Back up before major jumps.
 
-## Adding hub services later
-
-The box is a platform: any service that binds `127.0.0.1:<port>` becomes a
-subdomain in three moves.
-
-1. DNS — `A` record for the subdomain → same VM IP
-2. Caddy — append to `/etc/caddy/Caddyfile`, then `systemctl reload caddy`:
-
-   ```text
-   app.hub.example.com {
-       reverse_proxy 127.0.0.1:8080
-   }
-   ```
-
-3. Service — ship it as a systemd unit like [`deploy/sylver.service`](deploy/sylver.service),
-   listening on loopback only so nothing bypasses TLS
-
-Caddy issues each certificate automatically. Keep every service off the
-public interfaces; the proxy is the single front door.
-
 ## Backups and disaster recovery
 
 Everything stateful is two paths:
