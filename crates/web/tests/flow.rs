@@ -85,6 +85,74 @@ impl Hub {
     fn wrap_of(&self, user: &str) -> String {
         codec::encode(&self.wraps[user])
     }
+
+    fn rekey_start(&self, user: &str, request_b64: &str) -> String {
+        let ask = opaque::reg_ask(&codec::decode(request_b64).unwrap()).unwrap();
+        let started = ServerRegistration::<Suite>::start(&self.setup, ask, user.as_bytes()).unwrap();
+        codec::encode(&started.message.serialize())
+    }
+
+    fn rekey_finish(&mut self, user: &str, message_b64: &str, wrap_b64: &str) {
+        let give = opaque::reg_give(&codec::decode(message_b64).unwrap()).unwrap();
+        let record = ServerRegistration::<Suite>::finish(give);
+        self.users.insert(user.into(), record.serialize().to_vec());
+        self.wraps
+            .insert(user.into(), codec::decode(wrap_b64).unwrap());
+    }
+}
+
+#[test]
+fn rekey_preserves_secrets() {
+    let mut hub = Hub::new();
+
+    let start = sylvie_web::start_registration("alee", "first password ok").unwrap();
+    let handle: u64 = field(&start, "handle").parse().unwrap();
+    let response = hub.register_start("alee", &field(&start, "request"));
+    let finished = sylvie_web::finish_registration(handle, &response).unwrap();
+    let handle: u64 = field(&finished, "handle").parse().unwrap();
+    hub.register_finish("alee", &field(&finished, "message"), &field(&finished, "wrap"));
+    let _ = sylvie_web::drop_session(handle);
+
+    let wrap = hub.wrap_of("alee");
+
+    let start = sylvie_web::start_login("alee", "first password ok").unwrap();
+    let handle: u64 = field(&start, "handle").parse().unwrap();
+    let reply = hub.login_start("alee", &field(&start, "request"), "pending-r1");
+    let finished = sylvie_web::finish_login(handle, &reply, None, Some("web".into())).unwrap();
+    let handle: u64 = field(&finished, "handle").parse().unwrap();
+    sylvie_web::derive_vault(handle, &wrap).unwrap();
+    let boxed = sylvie_web::seal_secret(handle, "vault secret value").unwrap();
+    assert_eq!(
+        sylvie_web::open_secret(handle, &boxed).unwrap(),
+        "vault secret value"
+    );
+    let _ = sylvie_web::drop_session(handle);
+
+    let start = sylvie_web::start_login("alee", "first password ok").unwrap();
+    let handle: u64 = field(&start, "handle").parse().unwrap();
+    let reply = hub.login_start("alee", &field(&start, "request"), "pending-r2");
+    let finished = sylvie_web::finish_login(handle, &reply, Some("web".into()), None).unwrap();
+    let _ = hub.login_finish("alee", "pending-r2", &field(&finished, "message"));
+    sylvie_web::rekey_unwrap(handle, &wrap).unwrap();
+    let started = sylvie_web::rekey_start(handle, "second password ok").unwrap();
+    let response = hub.rekey_start("alee", &field(&started, "request"));
+    let finished = sylvie_web::rekey_finish(handle, &response, "second password ok").unwrap();
+    hub.rekey_finish("alee", &field(&finished, "message"), &field(&finished, "wrap"));
+    let _ = sylvie_web::drop_session(handle);
+
+    let wrap = hub.wrap_of("alee");
+
+    let start = sylvie_web::start_login("alee", "second password ok").unwrap();
+    let handle: u64 = field(&start, "handle").parse().unwrap();
+    let reply = hub.login_start("alee", &field(&start, "request"), "pending-r3");
+    let finished = sylvie_web::finish_login(handle, &reply, None, Some("web".into())).unwrap();
+    let handle: u64 = field(&finished, "handle").parse().unwrap();
+    sylvie_web::derive_vault(handle, &wrap).unwrap();
+    assert_eq!(
+        sylvie_web::open_secret(handle, &boxed).unwrap(),
+        "vault secret value"
+    );
+    let _ = sylvie_web::drop_session(handle);
 }
 
 #[test]

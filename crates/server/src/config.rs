@@ -16,6 +16,7 @@ pub struct Config {
     pub attempts: u32,
     pub window: Duration,
     pub session_ttl: Option<Duration>,
+    pub web_dir: PathBuf,
 }
 
 impl Config {
@@ -31,6 +32,7 @@ impl Config {
             attempts: number("SYLVIE_AUTH_ATTEMPTS", DEFAULT_ATTEMPTS),
             window: Duration::from_secs(number("SYLVIE_AUTH_WINDOW_SECS", DEFAULT_WINDOW)),
             session_ttl: (days > 0).then(|| Duration::from_secs(days * SECONDS_IN_DAY)),
+            web_dir: path("SYLVIE_WEB_DIR", PathBuf::from("web")),
         }
     }
 }

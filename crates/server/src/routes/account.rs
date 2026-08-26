@@ -1,5 +1,5 @@
 use axum::extract::FromRequestParts;
-use axum::http::header::AUTHORIZATION;
+use axum::http::header::{AUTHORIZATION, COOKIE};
 use axum::http::request::Parts;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -11,6 +11,7 @@ use crate::ctx::Ctx;
 use crate::reply::{Failure, internal};
 
 const BEARER: &str = "Bearer ";
+const TOKEN: &str = "sylvie_token";
 
 pub struct Account {
     pub owner: String,
@@ -21,9 +22,7 @@ impl FromRequestParts<Ctx> for Account {
     type Rejection = Failure;
 
     async fn from_request_parts(parts: &mut Parts, ctx: &Ctx) -> Result<Self, Self::Rejection> {
-        let header = parts.headers.get(AUTHORIZATION).ok_or(Error::Auth)?;
-        let header = header.to_str().map_err(|_| Error::Auth)?;
-        let token = header.strip_prefix(BEARER).ok_or(Error::Auth)?;
+        let token = bearer_token(parts).ok_or(Error::Auth)?;
         let row: Option<(String, String, String)> = sqlx::query_as(
             "select d.owner, d.id, s.created \
              from sessions s join devices d on d.id = s.device \
@@ -37,6 +36,22 @@ impl FromRequestParts<Ctx> for Account {
         fresh(ctx, &created)?;
         Ok(Self { owner, device })
     }
+}
+
+fn bearer_token(parts: &Parts) -> Option<String> {
+    if let Some(token) = parts
+        .headers
+        .get(AUTHORIZATION)
+        .and_then(|header| header.to_str().ok())
+        .and_then(|text| text.strip_prefix(BEARER))
+    {
+        return Some(token.to_string());
+    }
+    let cookies = parts.headers.get(COOKIE)?.to_str().ok()?;
+    let prefix = format!("{TOKEN}=");
+    cookies
+        .split(';')
+        .find_map(|pair| pair.trim().strip_prefix(&prefix).map(str::to_string))
 }
 
 fn fresh(ctx: &Ctx, created: &str) -> Result<(), Failure> {

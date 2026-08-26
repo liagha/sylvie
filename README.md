@@ -62,7 +62,9 @@ Configuration via environment variables (all optional):
 | `SYLVIE_MAX_FILE_SIZE`    | `268435456` (256 MiB)             |
 | `SYLVIE_AUTH_ATTEMPTS`    | `10` per IP+username per window   |
 | `SYLVIE_AUTH_WINDOW_SECS` | `300`                             |
-| `SYLVIE_SESSION_TTL_DAYS` | unset (sessions never expire)     |
+| `SYLVIE_SESSION_TTL_DAYS` | unset (sessions never expire)  |
+| `SYLVIE_WEB_DIR`           | `./web` (static dashboard assets) |
+
 
 The first account created becomes the only account; further registrations are
 rejected. Additional machines join by logging in.
@@ -109,6 +111,25 @@ end-to-end encrypted. Files, devices, and status run on the stored token.
 `SYLVIE_PASSWORD` is honored instead of the prompt for scripting.
 
 Client config lives in `~/.config/sylvie/config.toml`, mode `600`.
+
+## Web vault
+
+The hub serves a browser dashboard at `/` that is a full client: it runs the
+same OPAQUE registration/login and XChaCha vault crypto as the CLI, compiled to
+wasm (`crates/web`). Secret values are decrypted and sealed in the browser, so
+the server still never sees a password or plaintext. From the dashboard you can
+register, unlock with a password, view/set/delete secrets, upload/download/list
+files, revoke devices, change your password, and copy a device token.
+
+Build the assets (wasm + glue + shell) and point the server at them:
+
+```bash
+sh build-web.sh                 # writes ./web
+SYLVIE_WEB_DIR=./web ./sylver   # served at /assets
+```
+
+Without `SYLVIE_WEB_DIR` populated the pages render but the crypto buttons stay
+inert; the token-paste unlock path still works for a device enrolled via the CLI.
 
 ## Tests
 

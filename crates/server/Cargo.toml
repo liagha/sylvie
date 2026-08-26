@@ -30,3 +30,4 @@ pardeh = { git = "https://github.com/liagha/pardeh" }
 [dev-dependencies]
 reqwest.workspace = true
 uuid.workspace = true
+sylvie-web = { path = "../web" }

@@ -49,7 +49,14 @@ async fn spawn_full(max_file: u64, limits: Limits) -> Hub {
     let dir = std::env::temp_dir().join(format!("sylvie-test-{}", uuid::Uuid::new_v4()));
     tokio::fs::create_dir_all(dir.join("files")).await.unwrap();
     let pool = sylver::db::open(&dir.join("test.db")).await.unwrap();
-    let ctx = sylver::ctx::Ctx::build(pool, dir.join("files"), max_file, limits).await;
+    let ctx = sylver::ctx::Ctx::build(
+        pool,
+        dir.join("files"),
+        max_file,
+        limits,
+        dir.join("web"),
+    )
+    .await;
     let app = sylver::routes::build(ctx);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -725,6 +732,24 @@ async fn dashboard_gates_on_cookie() {
 }
 
 #[tokio::test]
+async fn api_accepts_cookie() {
+    let hub = spawn().await;
+    let authed = register(&hub, "alee", "correct horse", "laptop").await;
+
+    let client = web_client();
+    let reply = client
+        .get(format!("{}/api/v1/me", hub.base))
+        .header("cookie", format!("sylvie_token={}", authed.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(reply.status(), StatusCode::OK);
+    let me: Me = reply.json().await.unwrap();
+    assert_eq!(me.username, "alee");
+    assert_eq!(me.device.name, "laptop");
+}
+
+#[tokio::test]
 async fn dashboard_revoke_works() {
     let hub = spawn().await;
     let laptop = register(&hub, "alee", "correct horse", "laptop").await;
@@ -766,4 +791,298 @@ async fn dashboard_revoke_works() {
         .find(|d| d.id == laptop.device)
         .unwrap();
     assert!(row.revoked.is_some());
+}
+
+#[tokio::test]
+async fn web_register_then_enroll_matches_cli() {
+    let hub = spawn().await;
+    let user = "alee";
+    let password = "correct horse";
+    let name = "web";
+    let client = reqwest::Client::new();
+
+    let start = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::start_registration(user, password).unwrap(),
+    )
+    .unwrap();
+    let reply: reqwest::Response = client
+        .post(format!("{}/api/v1/auth/register/start", hub.base))
+        .json(&serde_json::json!({"username": user, "message": start["request"]}))
+        .send()
+        .await
+        .unwrap();
+    let reply: serde_json::Value = reply.json().await.unwrap();
+    eprintln!("register/start reply: {reply}");
+    let finished = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::finish_registration(
+            start["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+            reply["message"].as_str().unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let status = client
+        .post(format!("{}/api/v1/auth/register/finish", hub.base))
+        .json(&serde_json::json!({
+            "username": user,
+            "message": finished["message"],
+            "wrap": finished["wrap"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let start = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::start_login(user, password).unwrap(),
+    )
+    .unwrap();
+    let reply: serde_json::Value = client
+        .post(format!("{}/api/v1/auth/login/start", hub.base))
+        .json(&serde_json::json!({"username": user, "message": start["request"]}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let finished = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::finish_login(
+            start["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+            reply["message"].as_str().unwrap(),
+            None::<String>,
+            Some(name.to_string()),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let sealed: serde_json::Value = client
+        .post(format!("{}/api/v1/auth/login/finish", hub.base))
+        .json(&serde_json::json!({
+            "id": reply["id"],
+            "message": finished["message"],
+            "name": name,
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let grant = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::open_login(
+            finished["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+            sealed["data"].as_str().unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(!grant["token"].as_str().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn web_secrets_and_rekey_flow() {
+    let hub = spawn().await;
+    let user = "alee";
+    let password = "correct horse";
+    let name = "web";
+    let client = reqwest::Client::new();
+
+    let start = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::start_registration(user, password).unwrap(),
+    )
+    .unwrap();
+    let reply: serde_json::Value = client
+        .post(format!("{}/api/v1/auth/register/start", hub.base))
+        .json(&serde_json::json!({"username": user, "message": start["request"]}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let finished = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::finish_registration(
+            start["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+            reply["message"].as_str().unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    client
+        .post(format!("{}/api/v1/auth/register/finish", hub.base))
+        .json(&serde_json::json!({
+            "username": user,
+            "message": finished["message"],
+            "wrap": finished["wrap"],
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let start = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::start_login(user, password).unwrap(),
+    )
+    .unwrap();
+    let reply: serde_json::Value = client
+        .post(format!("{}/api/v1/auth/login/start", hub.base))
+        .json(&serde_json::json!({"username": user, "message": start["request"]}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let fin = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::finish_login(
+            start["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+            reply["message"].as_str().unwrap(),
+            None::<String>,
+            Some(name.to_string()),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let sealed: serde_json::Value = client
+        .post(format!("{}/api/v1/auth/login/finish", hub.base))
+        .json(&serde_json::json!({
+            "id": reply["id"],
+            "message": fin["message"],
+            "name": name,
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let grant = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::open_login(
+            fin["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+            sealed["data"].as_str().unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let token = grant["token"].as_str().unwrap().to_string();
+    assert!(!token.is_empty());
+    let auth = format!("sylvie_token={token}");
+
+    let wrap: serde_json::Value = client
+        .get(format!("{}/api/v1/vault", hub.base))
+        .header("cookie", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    sylvie_web::derive_vault(
+        fin["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+        wrap["data"].as_str().unwrap(),
+    )
+    .unwrap();
+
+    let handle = fin["handle"].as_str().unwrap().parse::<u64>().unwrap();
+    let boxed = sylvie_web::seal_secret(handle, "top secret value").unwrap();
+    let status = client
+        .put(format!("{}/api/v1/secrets/vault_pw", hub.base))
+        .header("cookie", &auth)
+        .json(&serde_json::json!({"data": boxed}))
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let got: serde_json::Value = client
+        .get(format!("{}/api/v1/secrets/vault_pw", hub.base))
+        .header("cookie", &auth)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let plain = sylvie_web::open_secret(handle, got["data"].as_str().unwrap()).unwrap();
+    assert_eq!(plain, "top secret value");
+
+    let new_password = "new correct horse";
+    let rstart = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::rekey_start(handle, new_password).unwrap(),
+    )
+    .unwrap();
+    let rreply: serde_json::Value = client
+        .post(format!("{}/api/v1/auth/rekey/start", hub.base))
+        .header("cookie", &auth)
+        .json(&serde_json::json!({"message": rstart["request"]}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let rfin = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::rekey_finish(handle, rreply["message"].as_str().unwrap(), new_password).unwrap(),
+    )
+    .unwrap();
+    let status = client
+        .post(format!("{}/api/v1/auth/rekey/finish", hub.base))
+        .header("cookie", &auth)
+        .json(&serde_json::json!({
+            "message": rfin["message"],
+            "wrap": rfin["wrap"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let start = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::start_login(user, new_password).unwrap(),
+    )
+    .unwrap();
+    let reply: serde_json::Value = client
+        .post(format!("{}/api/v1/auth/login/start", hub.base))
+        .json(&serde_json::json!({"username": user, "message": start["request"]}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let fin = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::finish_login(
+            start["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+            reply["message"].as_str().unwrap(),
+            None::<String>,
+            Some("again".to_string()),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let sealed: serde_json::Value = client
+        .post(format!("{}/api/v1/auth/login/finish", hub.base))
+        .json(&serde_json::json!({
+            "id": reply["id"],
+            "message": fin["message"],
+            "name": "again",
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let grant = serde_json::from_str::<serde_json::Value>(
+        &sylvie_web::open_login(
+            fin["handle"].as_str().unwrap().parse::<u64>().unwrap(),
+            sealed["data"].as_str().unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(!grant["token"].as_str().unwrap().is_empty());
 }

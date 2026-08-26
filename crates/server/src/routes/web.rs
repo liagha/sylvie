@@ -1,3 +1,8 @@
+// web dashboard: a single-page hub view rendered by pardeh, with a browser-side
+// module (shell.js) that drives the OPAQUE + vault crypto through the sylvie-web
+// wasm so the experience matches the CLI exactly — secrets stay end-to-end
+// encrypted and the server never sees a password or plaintext value.
+
 use std::collections::HashMap;
 
 use axum::extract::{Path, State};
@@ -6,7 +11,8 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Form, Router};
-use pardeh::{Node, Signals, button, div, form, h1, input, span, table, tbody, td, th, tr};
+use pardeh::{Node, Signals, a, button, div, form, h1, input, script, span, table, textarea, tbody, td, th, tr};
+
 use sqlx::SqlitePool;
 
 use sylvie_core::codec;
@@ -64,10 +70,47 @@ fn list_region(
     }
 }
 
-fn card(title: &'static str, region: Node) -> Node {
+fn file_region(key: &'static str, empty: &'static str) -> impl Fn(&Signals) -> Node {
+    move |signals: &Signals| {
+        let rows = signals.get::<Vec<Item>>(key);
+        let body = if rows.is_empty() {
+            tr().kid(
+                td().attr("colspan", "4")
+                    .kid(span().class("muted").text(empty)),
+            )
+        } else {
+            tbody().kids(rows.iter().map(|item| {
+                tr().kid(td().text(item.label.clone()))
+                    .kid(td().kid(span().class("muted").text(item.meta.clone())))
+                    .kid(td().class("mono").text(item.key.clone()))
+                    .kid(
+                        td().kid(
+                            form()
+                                .class("inline")
+                                .attr("method", "post")
+                                .attr("action", format!("/web/file/{}", item.key))
+                                .kid(button().attr("type", "submit").text("delete"))
+                                .kid(
+                                    a().attr("href", format!("/api/v1/files/{}/content", item.key))
+                                        .attr("download", "")
+                                        .text("download"),
+                                ),
+                        ),
+                    )
+            }))
+        };
+        table()
+            .kid(tr().kid(th()).kid(th()).kid(th()).kid(th())
+                .kid(th().text("")))
+            .kid(tbody().kid(body))
+    }
+}
+
+fn card(title: &'static str, region: Node, tools: Option<Node>) -> Node {
     div()
         .class("card")
         .kid(div().class("head").kid(h1().text(title)))
+        .kid(tools.unwrap_or_else(div))
         .kid(region)
 }
 
@@ -81,9 +124,11 @@ const CSS: &str = r#"
 body { margin: 0; background: #0e1116; color: #d7dde6; font: 15px/1.55 system-ui, sans-serif; padding: 2.5rem 1rem }
 .wrap { max-width: 58rem; margin: auto; display: grid; gap: 1.6rem }
 h1 { font-size: 1.3rem; letter-spacing: .04em; margin: 0 }
+h2 { font-size: .82rem; text-transform: uppercase; letter-spacing: .12em; color: #8b96a5; margin: 0 0 .6rem }
 .top { display: flex; justify-content: space-between; align-items: center }
 .card { background: #151a21; border: 1px solid #232a33; border-radius: 12px; overflow: hidden }
 .card .head h1 { font-size: .78rem; text-transform: uppercase; letter-spacing: .14em; color: #8b96a5; padding: .8rem 1rem .5rem }
+.card .tools { padding: .6rem 1rem; border-top: 1px solid #1d242c; display: grid; gap: .5rem }
 table { width: 100%; border-collapse: collapse }
 th { display: none }
 td { padding: .5rem .9rem; border-top: 1px solid #1d242c; font-size: .92rem }
@@ -91,21 +136,47 @@ tr:hover td { background: #181f27 }
 .muted { color: #7d8894; font-size: .85rem }
 .mono { font-family: ui-monospace, monospace; font-size: .78rem; color: #9fb2c8 }
 form.inline { display: inline; margin: 0 }
-button { background: #1d2833; border: 1px solid #33414f; color: #cfe0f5; border-radius: 7px; padding: .22rem .75rem; cursor: pointer; font-size: .82rem }
-button:hover { background: #26333f }
-input[type=password] { width: 100%; padding: .65rem .8rem; background: #10151b; color: #d7dde6; border: 1px solid #33414f; border-radius: 8px; font-size: .95rem }
-.login { max-width: 24rem; margin: 18vh auto 0 }
-.hint { display: block; color: #7d8894; font-size: .82rem; padding: 0 1rem 1rem }
+button, .link { background: #1d2833; border: 1px solid #33414f; color: #cfe0f5; border-radius: 7px; padding: .22rem .75rem; cursor: pointer; font-size: .82rem; text-decoration: none; display: inline-block }
+button:hover, .link:hover { background: #26333f }
+input[type=password], input[type=text], textarea { width: 100%; padding: .55rem .7rem; background: #10151b; color: #d7dde6; border: 1px solid #33414f; border-radius: 8px; font-size: .95rem; font-family: inherit }
+textarea { resize: vertical; min-height: 3.2rem }
+.row { display: grid; gap: .5rem; grid-template-columns: 1fr auto }
+.login { max-width: 26rem; margin: 12vh auto 0; display: grid; gap: 1.2rem }
+.login .card .head h1 { font-size: 1rem; text-transform: none; letter-spacing: .04em; color: #d7dde6; padding: 1rem 1rem .2rem }
+.field { display: grid; gap: .35rem; padding: 0 1rem 1rem }
+.field label { font-size: .8rem; color: #8b96a5 }
+.hint { display: block; color: #7d8894; font-size: .8rem; padding: 0 1rem 1rem }
+.note { color: #7d8894; font-size: .82rem; padding: 0 1rem .4rem }
+.status { color: #8b96a5; font-size: .82rem }
+.err { color: #e8798c; font-size: .82rem; min-height: 1rem }
 "#;
 
+fn app_script() -> Node {
+    script().attr("type", "module").attr("src", "/assets/shell.js")
+}
+
+fn field(label: &str, name: &str, kind: &str, placeholder: &str) -> Node {
+    div()
+        .class("field")
+        .kid(span().text(label))
+        .kid(
+            input()
+                .attr("type", kind)
+                .attr("name", name)
+                .attr("placeholder", placeholder)
+                .attr("autocomplete", "off"),
+        )
+}
+
 fn dashboard(signals: &Signals) -> Node {
-    div().kid(styles()).kid(
+    div().kid(styles()).kid(app_script()).kid(
         div()
             .class("wrap")
             .kid(
                 div()
                     .class("top")
                     .kid(h1().text("sylvie"))
+                    .kid(div().class("status").attr("id", "status").text(""))
                     .kid(logout_form()),
             )
             .kid(card(
@@ -114,6 +185,7 @@ fn dashboard(signals: &Signals) -> Node {
                     "devices",
                     list_region("devices", "no devices yet", "/web/device", "revoke"),
                 ),
+                None,
             ))
             .kid(card(
                 "secrets",
@@ -121,14 +193,62 @@ fn dashboard(signals: &Signals) -> Node {
                     "secrets",
                     list_region("secrets", "no secrets yet", "/web/secret", "delete"),
                 ),
+                Some(secret_tools()),
             ))
             .kid(card(
                 "files",
-                signals.region(
-                    "files",
-                    list_region("files", "no files yet", "/web/file", "delete"),
-                ),
-            )),
+                signals.region("files", file_region("files", "no files yet")),
+                Some(file_tools()),
+            ))
+            .kid(passwd_card()),
+    )
+}
+
+fn secret_tools() -> Node {
+    div().class("tools").kid(
+        form()
+            .attr("id", "secret-get")
+            .attr("class", "row")
+            .kid(input().attr("type", "text").attr("name", "name").attr("placeholder", "name to read"))
+            .kid(button().attr("type", "submit").text("get")),
+    )
+    .kid(
+        form()
+            .attr("id", "secret-set")
+            .attr("class", "tools")
+            .kid(input().attr("type", "text").attr("name", "name").attr("placeholder", "name to store"))
+            .kid(textarea().attr("name", "value").attr("placeholder", "value (prompted for password)"))
+            .kid(div().class("err").attr("id", "secret-msg").text("")),
+    )
+}
+
+fn file_tools() -> Node {
+    div().class("tools").kid(
+        form()
+            .attr("id", "file-upload")
+            .attr("class", "row")
+            .kid(input().attr("type", "file").attr("name", "file"))
+            .kid(button().attr("type", "submit").text("upload")),
+    )
+    .kid(div().class("err").attr("id", "file-msg").text(""))
+}
+
+fn passwd_card() -> Node {
+    div().class("card").kid(
+        div()
+            .class("head")
+            .kid(h1().text("account"))
+            .kid(div().class("tools"))
+            .kid(logout_form()),
+    )
+    .kid(
+        form()
+            .attr("id", "passwd")
+            .attr("class", "tools")
+            .kid(field("current password", "old", "password", ""))
+            .kid(field("new password (min 8)", "new", "password", ""))
+            .kid(button().attr("type", "submit").text("change password"))
+            .kid(div().class("err").attr("id", "passwd-msg").text("")),
     )
 }
 
@@ -141,10 +261,43 @@ fn logout_form() -> Node {
 }
 
 fn login_body() -> Node {
-    div().kid(styles()).kid(
+    div().kid(styles()).kid(app_script()).kid(
         div().class("login").kid(
-            div().class("card").kid(
-                div().class("head").kid(h1().text("sylvie hub")).kid(
+            div().class("card")
+                .kid(div().class("head").kid(h1().text("create account")))
+                .kid(
+                    form()
+                        .attr("id", "form-register")
+                        .kid(field("username", "user", "text", "you"))
+                        .kid(field("password", "password", "password", "min 8 characters"))
+                        .kid(field("device name", "name", "text", "this browser"))
+                        .kid(
+                            div().class("field")
+                                .kid(button().attr("type", "submit").text("create account")),
+                        ),
+                )
+                .kid(div().class("err").attr("id", "register-msg").text("")),
+        )
+        .kid(
+            div().class("card")
+                .kid(div().class("head").kid(h1().text("unlock with password")))
+                .kid(
+                    form()
+                        .attr("id", "form-login")
+                        .kid(field("username", "user", "text", "you"))
+                        .kid(field("password", "password", "password", ""))
+                        .kid(field("device name", "name", "text", "this browser"))
+                        .kid(
+                            div().class("field")
+                                .kid(button().attr("type", "submit").text("unlock")),
+                        ),
+                )
+                .kid(div().class("err").attr("id", "login-msg").text("")),
+        )
+        .kid(
+            div().class("card")
+                .kid(div().class("head").kid(h1().text("or paste a device token")))
+                .kid(
                     form()
                         .attr("method", "post")
                         .attr("action", "/login")
@@ -152,10 +305,13 @@ fn login_body() -> Node {
                         .kid(
                             span()
                                 .class("hint")
-                                .text("paste a device token — sylvie token prints it"),
+                                .text("from `sylvie token` on a device already enrolled"),
+                        )
+                        .kid(
+                            div().class("field")
+                                .kid(button().attr("type", "submit").text("unlock")),
                         ),
                 ),
-            ),
         ),
     )
 }
@@ -167,6 +323,7 @@ pub fn router(ctx: Ctx) -> Router {
         .route("/", get(index))
         .route("/login", get(login_get).post(login_post))
         .route("/logout", post(logout))
+        .route("/assets/{*path}", get(asset))
         .route(
             pardeh::SCRIPT_PATH,
             get(move || async move { script_ctx.web().script_response() }),
@@ -383,7 +540,9 @@ async fn known_token(db: &sqlx::SqlitePool, token: &str) -> Option<(String, Stri
 }
 
 fn cookie(token: &str) -> HeaderValue {
-    header_value(format!("{COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/"))
+    header_value(format!(
+        "{COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/"
+    ))
 }
 
 fn clear_cookie() -> HeaderValue {
@@ -416,5 +575,45 @@ fn human(bytes: u64) -> String {
         format!("{bytes} B")
     } else {
         format!("{size:.1} {}", UNITS[unit])
+    }
+}
+
+async fn asset(State(ctx): State<Ctx>, Path(path): Path<String>) -> Response {
+    let root = match ctx.web_dir().canonicalize() {
+        Ok(root) => root,
+        Err(_) => return (StatusCode::NOT_FOUND).into_response(),
+    };
+    let target = match root.join(&path).canonicalize() {
+        Ok(target) => target,
+        Err(_) => return (StatusCode::NOT_FOUND).into_response(),
+    };
+    if target.strip_prefix(&root).is_err() {
+        return (StatusCode::NOT_FOUND).into_response();
+    }
+    let data = match tokio::fs::read(&target).await {
+        Ok(data) => data,
+        Err(_) => return (StatusCode::NOT_FOUND).into_response(),
+    };
+    let mime = mime_for(&target);
+    (
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(mime).unwrap_or_else(|_| header::HeaderValue::from_static("application/octet-stream")),
+        )],
+        data,
+    )
+        .into_response()
+}
+
+fn mime_for(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("js") => "text/javascript; charset=utf-8",
+        Some("wasm") => "application/wasm",
+        Some("css") => "text/css",
+        Some("json") => "application/json",
+        Some("html") => "text/html; charset=utf-8",
+        Some("map") => "application/json",
+        Some("ico") => "image/x-icon",
+        _ => "application/octet-stream",
     }
 }

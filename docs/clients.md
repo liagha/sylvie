@@ -38,10 +38,11 @@ What works from iOS *today*, without installing anything:
 - files: `GET /api/v1/files` + `/content` with a bearer token (plaintext by
   design), via the Shortcuts app
 - secret names/timestamps: readable metadata
-- secret values: not decryptable until the planned web/mobile client exists
+- secret values: decryptable from the web vault, which runs the real OPAQUE +
+  XChaCha client in the browser (see the `sylver` dashboard at `/`)
 
-The API was built client-agnostic (`docs/protocol.md`) exactly for this; a
-minimal web vault is the natural next Sylvie milestone.
+The API was built client-agnostic (`docs/protocol.md`) exactly for this; the
+dashboard and the CLI share `crates/web` so a single crypto path serves both.
 
 ## Revoking anything
 

@@ -22,7 +22,14 @@ async fn main() {
         window: cfg.window,
         session_ttl: cfg.session_ttl,
     };
-    let ctx = sylver::ctx::Ctx::build(pool, cfg.storage.clone(), cfg.max_file, limits).await;
+    let ctx = sylver::ctx::Ctx::build(
+        pool,
+        cfg.storage.clone(),
+        cfg.max_file,
+        limits,
+        cfg.web_dir.clone(),
+    )
+    .await;
     let app = sylver::routes::build(ctx);
     let listener = tokio::net::TcpListener::bind(&cfg.bind)
         .await

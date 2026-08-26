@@ -1,3 +1,7 @@
+// sylvie-web: wasm bindings exposing the OPAQUE + vault crypto the CLI runs,
+// so the browser can register, log in, derive the vault, seal/open secrets and
+// rotate the password without the server ever seeing a plaintext.
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -23,7 +27,8 @@ type Fail<T> = Result<T, String>;
 pub use {
     derive_vault_impl as derive_vault, drop_session_impl as drop_session,
     finish_login_impl as finish_login, finish_registration_impl as finish_registration,
-    open_login_impl as open_login, open_secret_impl as open_secret,
+    open_login_impl as open_login, open_secret_impl as open_secret, rekey_finish_impl as rekey_finish,
+    rekey_start_impl as rekey_start, rekey_unwrap_impl as rekey_unwrap,
     seal_secret_impl as seal_secret, start_login_impl as start_login,
     start_registration_impl as start_registration,
 };
@@ -34,7 +39,10 @@ struct Session {
     registration: Option<ClientRegistration<Suite>>,
     login: Option<ClientLogin<Suite>>,
     export: Vec<u8>,
+    session_key: Vec<u8>,
     datakey: Vec<u8>,
+    secret: Vec<u8>,
+    rekey_reg: Option<ClientRegistration<Suite>>,
 }
 
 thread_local! {
@@ -73,6 +81,11 @@ fn bad(text: &str) -> String {
     text.to_string()
 }
 
+fn vault_kek(handle: u64) -> Fail<Vec<u8>> {
+    edit(handle, |session| vault::root(&session.export, vault::VAULT))
+        .and_then(|inner| inner.map_err(|_| bad("key derivation failed")))
+}
+
 pub fn start_registration_impl(username: &str, password: &str) -> Fail<String> {
     let started = ClientRegistration::<Suite>::start(&mut OsRng, password.as_bytes())
         .map_err(|_| bad("registration start failed"))?;
@@ -82,7 +95,10 @@ pub fn start_registration_impl(username: &str, password: &str) -> Fail<String> {
         registration: Some(started.state),
         login: None,
         export: Vec::new(),
+        session_key: Vec::new(),
         datakey: Vec::new(),
+        secret: Vec::new(),
+        rekey_reg: None,
     });
     json(json!({
         "handle": handle.to_string(),
@@ -114,6 +130,7 @@ pub fn finish_registration_impl(handle: u64, response: &str) -> Fail<String> {
     let wrap = vault::seal(&kek, &secret).map_err(|_| bad("seal failed"))?;
 
     session.export = finished.export_key.as_slice().to_vec();
+    session.secret = secret.to_vec();
     let handle = put(session);
     json(json!({
         "handle": handle.to_string(),
@@ -131,7 +148,10 @@ pub fn start_login_impl(username: &str, password: &str) -> Fail<String> {
         registration: None,
         login: Some(started.state),
         export: Vec::new(),
+        session_key: Vec::new(),
         datakey: Vec::new(),
+        secret: Vec::new(),
+        rekey_reg: None,
     });
     json(json!({
         "handle": handle.to_string(),
@@ -164,6 +184,7 @@ pub fn finish_login_impl(
 
     session.login = None;
     session.export = finished.export_key.as_slice().to_vec();
+    session.session_key = finished.session_key.as_slice().to_vec();
     let handle = put(session);
     json(json!({
         "handle": handle.to_string(),
@@ -188,12 +209,14 @@ pub fn open_login_impl(handle: u64, sealed: &str) -> Fail<String> {
 }
 
 pub fn derive_vault_impl(handle: u64, wrapped: &str) -> Fail<()> {
-    let kek = edit(handle, |session| vault::root(&session.export, vault::VAULT))
-        .and_then(|inner| inner.map_err(|_| bad("key derivation failed")))?;
+    let kek = vault_kek(handle)?;
     let secret = vault::open(&kek, &codec::decode(wrapped).map_err(|_| bad("bad wrap"))?)
         .map_err(|_| bad("wrong password"))?;
     let datakey = vault::root(&secret, vault::DATA).map_err(|_| bad("key derivation failed"))?;
-    edit(handle, |session| session.datakey = datakey)?;
+    edit(handle, |session| {
+        session.secret = secret;
+        session.datakey = datakey;
+    })?;
     Ok(())
 }
 
@@ -211,22 +234,53 @@ pub fn open_secret_impl(handle: u64, boxed: &str) -> Fail<String> {
     String::from_utf8(plain).map_err(|_| bad("binary secret"))
 }
 
+pub fn rekey_unwrap_impl(handle: u64, wrapped: &str) -> Fail<()> {
+    let kek = vault_kek(handle)?;
+    let secret = vault::open(&kek, &codec::decode(wrapped).map_err(|_| bad("bad wrap"))?)
+        .map_err(|_| bad("wrong password"))?;
+    edit(handle, |session| session.secret = secret)?;
+    Ok(())
+}
+
+pub fn rekey_start_impl(handle: u64, new_password: &str) -> Fail<String> {
+    let started = ClientRegistration::<Suite>::start(&mut OsRng, new_password.as_bytes())
+        .map_err(|_| bad("rekey start failed"))?;
+    edit(handle, |session| session.rekey_reg = Some(started.state))?;
+    json(json!({ "request": codec::encode(&started.message.serialize()) }))
+}
+
+pub fn rekey_finish_impl(handle: u64, response: &str, new_password: &str) -> Fail<String> {
+    let mut session = take(handle)?;
+    let started = session
+        .rekey_reg
+        .take()
+        .ok_or_else(|| bad("rekey not started"))?;
+    let finished = started
+        .finish(
+            &mut OsRng,
+            new_password.as_bytes(),
+            opaque::reg_reply(&codec::decode(response).map_err(|_| bad("bad response"))?)
+                .map_err(|_| bad("bad response"))?,
+            ClientRegistrationFinishParameters::new(opaque::peer(&session.username), None),
+        )
+        .map_err(|_| bad("rekey rejected"))?;
+    let kek = vault::root(finished.export_key.as_slice(), vault::VAULT)
+        .map_err(|_| bad("key derivation failed"))?;
+    let wrap = vault::seal(&kek, &session.secret).map_err(|_| bad("seal failed"))?;
+    json(json!({
+        "message": codec::encode(&finished.message.serialize()),
+        "wrap": codec::encode(&wrap),
+    }))
+}
+
 fn peek_channel(handle: u64) -> Fail<Vec<u8>> {
-    edit(handle, |session| {
-        vault::root(&session.export, vault::CHANNEL)
-    })
-    .and_then(|inner| inner.map_err(|_| bad("key derivation failed")))
+    edit(handle, |session| vault::root(&session.session_key, vault::CHANNEL))
+        .and_then(|inner| inner.map_err(|_| bad("key derivation failed")))
 }
 
 pub fn drop_session_impl(handle: u64) -> Fail<()> {
     take(handle)?;
     Ok(())
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-pub fn drop_session(handle: u64) -> Result<(), JsValue> {
-    drop_session_impl(handle).map_err(|error| JsValue::from_str(&error))
 }
 
 fn datakey_of(handle: u64) -> Fail<Vec<u8>> {
@@ -236,10 +290,11 @@ fn datakey_of(handle: u64) -> Fail<Vec<u8>> {
     }
     Ok(key)
 }
+
 #[cfg(target_arch = "wasm32")]
 mod exports {
     use super::*;
-    use wasm_bindgen::prelude::*;
+
     #[wasm_bindgen]
     pub fn start_registration(username: &str, password: &str) -> Result<String, JsValue> {
         start_registration_impl(username, password).map_err(|error| JsValue::from_str(&error))
@@ -283,6 +338,21 @@ mod exports {
     #[wasm_bindgen]
     pub fn open_secret(handle: u64, boxed: &str) -> Result<String, JsValue> {
         open_secret_impl(handle, boxed).map_err(|error| JsValue::from_str(&error))
+    }
+
+    #[wasm_bindgen]
+    pub fn rekey_unwrap(handle: u64, wrapped: &str) -> Result<(), JsValue> {
+        rekey_unwrap_impl(handle, wrapped).map_err(|error| JsValue::from_str(&error))
+    }
+
+    #[wasm_bindgen]
+    pub fn rekey_start(handle: u64, new_password: &str) -> Result<String, JsValue> {
+        rekey_start_impl(handle, new_password).map_err(|error| JsValue::from_str(&error))
+    }
+
+    #[wasm_bindgen]
+    pub fn rekey_finish(handle: u64, response: &str, new_password: &str) -> Result<String, JsValue> {
+        rekey_finish_impl(handle, response, new_password).map_err(|error| JsValue::from_str(&error))
     }
 
     #[wasm_bindgen]

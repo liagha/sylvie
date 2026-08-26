@@ -47,6 +47,7 @@ struct Inner {
     max_file: u64,
     limits: Limits,
     web: pardeh::App,
+    web_dir: PathBuf,
     pendings: Mutex<HashMap<String, Pending>>,
     floods: Mutex<HashMap<String, Strike>>,
 }
@@ -55,7 +56,13 @@ struct Inner {
 pub struct Ctx(Arc<Inner>);
 
 impl Ctx {
-    pub async fn build(db: SqlitePool, storage: PathBuf, max_file: u64, limits: Limits) -> Self {
+    pub async fn build(
+        db: SqlitePool,
+        storage: PathBuf,
+        max_file: u64,
+        limits: Limits,
+        web_dir: PathBuf,
+    ) -> Self {
         let setup = match load_setup(&db).await {
             Ok(setup) => setup,
             Err(error) => panic!("server setup: {error}"),
@@ -69,6 +76,7 @@ impl Ctx {
             max_file,
             limits,
             web,
+            web_dir,
             pendings: Mutex::new(HashMap::new()),
             floods: Mutex::new(HashMap::new()),
         }))
@@ -88,6 +96,10 @@ impl Ctx {
 
     pub fn web(&self) -> &pardeh::App {
         &self.0.web
+    }
+
+    pub fn web_dir(&self) -> &PathBuf {
+        &self.0.web_dir
     }
 
     pub fn limits(&self) -> Limits {
