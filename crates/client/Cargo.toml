@@ -1,0 +1,20 @@
+[package]
+name = "sylvie"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "sylvie"
+path = "src/main.rs"
+
+[dependencies]
+sylvie-core.workspace = true
+clap.workspace = true
+dirs.workspace = true
+opaque-ke.workspace = true
+reqwest.workspace = true
+rpassword.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true

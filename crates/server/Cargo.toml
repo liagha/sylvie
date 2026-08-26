@@ -1,0 +1,30 @@
+[package]
+name = "sylvie-server"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "sylvie-server"
+path = "src/main.rs"
+
+[dependencies]
+sylvie-core.workspace = true
+axum.workspace = true
+base64.workspace = true
+opaque-ke.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+time.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+dirs.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true
+uuid.workspace = true

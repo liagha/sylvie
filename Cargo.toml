@@ -1,22 +1,40 @@
-[package]
-name = "sylvie"
+[workspace]
+resolver = "3"
+members = [
+    "crates/core",
+    "crates/client",
+    "crates/server",
+]
+
+[workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
-[features]
-cuda = ["candle-core/cuda"]
-default = []
+[workspace.dependencies]
+sylvie-core = { path = "crates/core" }
+axum = "0.8"
+base64 = "0.22"
+chacha20poly1305 = "0.11"
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+hkdf = "0.12"
+opaque-ke = { version = "4.0.1", features = ["argon2", "ristretto255"] }
+rand = "0.8"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+rpassword = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "migrate"] }
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
 
-[dependencies]
-candle-core = "0.10.2"
-candle-nn = "0.10.2"
-candle-transformers = "0.10.2"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tokenizers = "0.23.1"
-rand = "0.10.1"
-
-[profile.dev]
-opt-level = 3
-debug = false
-lto = false
+[profile.release]
+strip = true
+lto = true
