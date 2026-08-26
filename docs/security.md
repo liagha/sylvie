@@ -44,7 +44,7 @@ the password — `sylvie passwd` re-wraps one 32-byte blob on rotation and
 every existing secret stays readable. The server stores only the wrapped
 form.
 
-No key ever touches the server disk: the vault key exists only inside CLI
+None of these keys ever touch the server disk: they exist only inside CLI
 processes for the duration of one command.
 
 ## What the server can see
@@ -92,6 +92,6 @@ machine are gone regardless.
 
 ## Upgrades this design anticipates
 
-per-device keypairs enabling device-to-device pairing · encrypted file blobs
-(streaming AEAD behind `files.path`) · rate limiting middleware · password
-rotation via vault re-wrap · OS-keyring caching of the derived vault key.
+per-device keypairs enabling device-to-device pairing and enrollment approval ·
+encrypted file blobs (streaming AEAD behind `files.path`) · OS-keyring caching
+of the derived keys.

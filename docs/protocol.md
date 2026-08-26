@@ -27,28 +27,6 @@ The client generates a random 32-byte vault secret at registration and sends
 `wrap` = the vault secret sealed under `HKDF-SHA512(export_key, "sylvie/vault")`.
 It keeps its `export_key` from the finish step.
 
-## Password change (rekey)
-
-Authenticated with an existing bearer token; two OPAQUE registrations happen,
-one to prove knowledge of the old password (a login), one to install the new
-one:
-
-```text
-GET /api/v1/vault                        → { data }   data = stored wrap
-
-POST /api/v1/auth/rekey/start            bearer required
-  { message }                            message = RegistrationRequest (new password)
-→ { message }                            message = RegistrationResponse
-
-POST /api/v1/auth/rekey/finish           bearer required
-  { message, wrap }                      wrap sealed under the NEW export key
-→ 204                                     users.record + users.wrap replaced atomically-ish
-```
-
-The client unwraps the vault secret with the old key and re-wraps it under the
-new one; secret ciphertext is never touched. Existing sessions and devices
-survive; other devices simply re-login with the new password.
-
 ## Login
 
 ```text
@@ -77,6 +55,28 @@ In both modes only a client holding the password can decrypt `data`, because
 the sealing key is `HKDF-SHA512(session_key, "sylvie/channel")` where
 `session_key` is the OPAQUE handshake output.
 
+## Password change (rekey)
+
+Authenticated with an existing bearer token; two OPAQUE registrations happen,
+one to prove knowledge of the old password (a login), one to install the new
+one:
+
+```text
+GET /api/v1/vault                        → { data }   data = stored wrap
+
+POST /api/v1/auth/rekey/start            bearer required
+  { message }                            message = RegistrationRequest (new password)
+→ { message }                            message = RegistrationResponse
+
+POST /api/v1/auth/rekey/finish           bearer required
+  { message, wrap }                      wrap sealed under the NEW export key
+→ 204                                      users.record and users.wrap replaced in one update
+```
+
+The client unwraps the vault secret with the old key and re-wraps it under the
+new one; secret ciphertext is never touched. Existing sessions and devices
+survive; other devices simply re-login with the new password.
+
 ## Authenticated calls
 
 ```text
@@ -84,7 +84,8 @@ Authorization: Bearer <token>
 ```
 
 Tokens are 32 random bytes, url-base64 on the wire, stored only as SHA-256.
-No expiry; revocation is the mechanism.
+They never expire unless `SYLVIE_SESSION_TTL_DAYS` is set; revocation is the
+primary mechanism either way.
 
 ```text
 GET    /api/v1/me            → { username, device{name,id,...}, secrets, files, devices }

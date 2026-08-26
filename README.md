@@ -5,17 +5,17 @@ device registry; every machine you own connects as an independent, revocable
 device. Secret values are end-to-end encrypted — the server stores ciphertext
 only and never learns your password.
 
-## Status: v0.1
-
-A complete vertical slice:
+## Features
 
 ```text
-authentication (OPAQUE, RFC 9807)
-devices (per-device identity and revocation)
-secrets (client-side XChaCha20-Poly1305)
-files (SHA-256 integrity, streamed download)
-CLI + versioned JSON API (/api/v1)
-SQLite persistence with migrations
+authentication   OPAQUE (RFC 9807) — your password never leaves the machine
+devices          one account, many machines, each independently revocable
+secrets          end-to-end encrypted values (XChaCha20-Poly1305)
+files            upload/download with SHA-256 integrity checks
+password change  rotate without losing secrets (vault re-wrap)
+api              versioned JSON at /api/v1, ready for non-CLI clients
+persistence      SQLite (WAL) with embedded migrations
+cli              Unix-style, composable, --json everywhere
 ```
 
 ## Layout
@@ -44,16 +44,16 @@ Produces `target/release/sylvie` and `target/release/sylvie-server`.
 
 Configuration via environment variables (all optional):
 
-| variable               | default                          |
-|------------------------|----------------------------------|
-| `SYLVIE_BIND_ADDR`     | `127.0.0.1:7400`                 |
-| `SYLVIE_DB_PATH`       | `$XDG_DATA_HOME/sylvie/sylvie.db`|
-| `SYLVIE_STORAGE_PATH`  | `$XDG_DATA_HOME/sylvie/files`    |
-| `SYLVIE_LOG_LEVEL`     | `info`                           |
-| `SYLVIE_MAX_FILE_SIZE` | `268435456` (256 MiB)            |
-| `SYLVIE_AUTH_ATTEMPTS` | `10` per IP+username per window  |
-| `SYLVIE_AUTH_WINDOW_SECS` | `300`                         |
-| `SYLVIE_SESSION_TTL_DAYS` | unset (sessions never expire) |
+| variable                  | default                           |
+|---------------------------|-----------------------------------|
+| `SYLVIE_BIND_ADDR`        | `127.0.0.1:7400`                  |
+| `SYLVIE_DB_PATH`          | `$XDG_DATA_HOME/sylvie/sylvie.db` |
+| `SYLVIE_STORAGE_PATH`     | `$XDG_DATA_HOME/sylvie/files`     |
+| `SYLVIE_LOG_LEVEL`        | `info`                            |
+| `SYLVIE_MAX_FILE_SIZE`    | `268435456` (256 MiB)             |
+| `SYLVIE_AUTH_ATTEMPTS`    | `10` per IP+username per window   |
+| `SYLVIE_AUTH_WINDOW_SECS` | `300`                             |
+| `SYLVIE_SESSION_TTL_DAYS` | unset (sessions never expire)     |
 
 The first account created becomes the only account; further registrations are
 rejected. Additional machines join by logging in.
@@ -64,7 +64,7 @@ rejected. Additional machines join by logging in.
 sylvie register --url http://host:7400 --user alee
 ```
 
-Prompts for a password and device name. Later machines:
+Prompts for a password and a device name. Later machines:
 
 ```bash
 sylvie login --url http://host:7400 --user alee
@@ -76,8 +76,8 @@ sylvie login --url http://host:7400 --user alee
 sylvie status
 
 sylvie secret list
-sylvie secret set github          # prompts for value
-sylvie secret set github ghp_xxx  # or pass it / reads stdin-free scripts use SYLVIE_PASSWORD
+sylvie secret set github           # prompts for the value
+sylvie secret set github ghp_xxx   # or pass it as an argument
 sylvie secret get github
 sylvie secret delete github
 
@@ -89,14 +89,17 @@ sylvie file delete <id>
 sylvie device list
 sylvie device revoke <id>
 
-sylvie passwd                     # rotate password; secrets survive via vault re-wrap
+sylvie passwd                      # rotate password; every secret survives
 sylvie logout
 ```
 
-Every command accepts `--json` for machine-readable output. Secrets require
-your password each time (that is what keeps them end-to-end); files and device
-management use the stored token. `SYLVIE_PASSWORD` env var is honored for
-scripting. Client config lives in `~/.config/sylvie/config.toml` (mode 600).
+Every command accepts `--json` for machine-readable output.
+
+Secret operations ask for your password each time — that is what keeps them
+end-to-end encrypted. Files, devices, and status run on the stored token.
+`SYLVIE_PASSWORD` is honored instead of the prompt for scripting.
+
+Client config lives in `~/.config/sylvie/config.toml`, mode `600`.
 
 ## Tests
 
@@ -104,18 +107,21 @@ scripting. Client config lives in `~/.config/sylvie/config.toml` (mode 600).
 cargo test
 ```
 
-13 tests cover vault cryptography and the full HTTP API including OPAQUE
-registration/login, wrong passwords, revocation, secret round-trips, tampering
-detection, and file integrity.
+17 tests cover the vault cryptography and the full HTTP API: OPAQUE
+registration/login, wrong passwords and unknown-user responses, flood
+gating, session expiry, device revocation, secret round-trips and tamper
+detection, password rotation preserving secrets, and file integrity.
 
 ## Documentation
 
-- `docs/architecture.md` — components and how they communicate
-- `docs/protocol.md` — wire format of `/api/v1`
-- `docs/security.md` — threat model, key hierarchy, honest limitations
+- [`docs/architecture.md`](docs/architecture.md) — components and how they communicate
+- [`docs/protocol.md`](docs/protocol.md) — wire format of `/api/v1`
+- [`docs/security.md`](docs/security.md) — threat model, key hierarchy, honest limitations
 
-## Known limitations (v0.1)
+## Known limitations
 
-- secret names and file contents are readable on the server disk (values are not)
+- secret names and file contents are readable on the server disk
+  (secret values are not)
 - plain HTTP — put a TLS reverse proxy in front for anything beyond localhost
-- no rate limiting, no password change flow, single user
+- single user; rate-limit state is in-memory and resets on restart
+- no external security review yet — read docs/security.md before trusting it
