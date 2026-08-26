@@ -1,0 +1,17 @@
+hub.example.com {
+	reverse_proxy 127.0.0.1:7400
+	header {
+		Strict-Transport-Security "max-age=31536000; include-subdomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+	request_body {
+		max_size 1GB
+	}
+}
+
+# future services: one block per subdomain, same shape
+# git.hub.example.com {
+# 	reverse_proxy 127.0.0.1:3000
+# }

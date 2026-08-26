@@ -1,0 +1,24 @@
+[Unit]
+Description=Sylvie personal hub server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=sylvie
+Group=sylvie
+EnvironmentFile=/etc/sylvie/sylvie.env
+ExecStart=/usr/local/bin/sylvie-server
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+StateDirectory=sylvie
+
+[Install]
+WantedBy=multi-user.target
