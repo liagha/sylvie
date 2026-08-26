@@ -1,5 +1,5 @@
 [Unit]
-Description=Sylvie personal hub server
+Description=sylver — sylvie hub server
 After=network-online.target
 Wants=network-online.target
 
@@ -7,7 +7,7 @@ Wants=network-online.target
 User=sylvie
 Group=sylvie
 EnvironmentFile=/etc/sylvie/sylvie.env
-ExecStart=/usr/local/bin/sylvie-server
+ExecStart=/usr/local/bin/sylver
 Restart=always
 RestartSec=3
 

@@ -23,7 +23,7 @@ cli              Unix-style, composable, --json everywhere
 ```text
 crates/core      shared models, protocol types, crypto helpers
 crates/client    sylvie CLI
-crates/server    sylvie-server
+crates/server    sylver (hub server)
 migrations/      SQL migrations
 docs/            architecture.md · protocol.md · security.md
 ```
@@ -34,12 +34,12 @@ docs/            architecture.md · protocol.md · security.md
 cargo build --release
 ```
 
-Produces `target/release/sylvie` and `target/release/sylvie-server`.
+Produces `target/release/sylvie` and `target/release/sylver`.
 
 ## Run the server
 
 ```bash
-./target/release/sylvie-server
+./target/release/sylver
 ```
 
 Configuration via environment variables (all optional):

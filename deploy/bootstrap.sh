@@ -39,9 +39,9 @@ id -u sylvie >/dev/null 2>&1 || useradd --system --home /var/lib/sylvie --shell 
 install -d -o sylvie -g sylvie -m 700 /var/lib/sylvie/files
 
 echo "== binaries (${ARCH})"
-curl -fL --retry 3 -o /usr/local/bin/sylvie-server "${BASE_URL}/sylvie-server-${ARCH}"
+curl -fL --retry 3 -o /usr/local/bin/sylver "${BASE_URL}/sylver-${ARCH}"
 curl -fL --retry 3 -o /usr/local/bin/sylvie "${BASE_URL}/sylvie-${ARCH}"
-chmod 755 /usr/local/bin/sylvie-server /usr/local/bin/sylvie
+chmod 755 /usr/local/bin/sylver /usr/local/bin/sylvie
 
 echo "== config"
 install -d -m 755 /etc/sylvie
@@ -74,14 +74,14 @@ CADDY
 
 echo "== services and firewall"
 systemctl daemon-reload
-systemctl enable --now sylvie-server.service
+systemctl enable --now sylver.service
 systemctl enable --now caddy.service
 ufw allow openssh >/dev/null 2>&1 || true
 ufw allow 80,443/tcp >/dev/null 2>&1 || true
 yes | ufw enable >/dev/null 2>&1 || true
 
 sleep 1
-systemctl is-active --quiet sylvie-server && echo "sylvie-server: running"
+systemctl is-active --quiet sylver && echo "sylver: running"
 systemctl is-active --quiet caddy && echo "caddy: running"
 echo
 echo "done. once hub.example.com points at this machine:"

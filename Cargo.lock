@@ -2405,38 +2405,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
-name = "sylvie"
-version = "0.2.0"
-dependencies = [
- "clap",
- "dirs",
- "opaque-ke",
- "reqwest",
- "rpassword",
- "serde",
- "serde_json",
- "sylvie-core",
- "tokio",
- "toml",
-]
-
-[[package]]
-name = "sylvie-core"
-version = "0.2.0"
-dependencies = [
- "base64",
- "chacha20poly1305",
- "hkdf 0.12.4",
- "opaque-ke",
- "rand 0.8.8",
- "serde",
- "sha2 0.10.9",
- "thiserror",
-]
-
-[[package]]
-name = "sylvie-server"
-version = "0.2.0"
+name = "sylver"
+version = "0.2.1"
 dependencies = [
  "axum",
  "base64",
@@ -2455,6 +2425,36 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "sylvie"
+version = "0.2.1"
+dependencies = [
+ "clap",
+ "dirs",
+ "opaque-ke",
+ "reqwest",
+ "rpassword",
+ "serde",
+ "serde_json",
+ "sylvie-core",
+ "tokio",
+ "toml",
+]
+
+[[package]]
+name = "sylvie-core"
+version = "0.2.1"
+dependencies = [
+ "base64",
+ "chacha20poly1305",
+ "hkdf 0.12.4",
+ "opaque-ke",
+ "rand 0.8.8",
+ "serde",
+ "sha2 0.10.9",
+ "thiserror",
 ]
 
 [[package]]

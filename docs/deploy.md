@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/liagha/sylvie/main/deploy/bootstrap
 
 What it does: installs Caddy, creates a locked `sylvie` system user,
 downloads release binaries for your architecture into `/usr/local/bin`,
-writes `/etc/sylvie/sylvie.env`, enables `sylvie-server.service` +
+writes `/etc/sylvie/sylvie.env`, enables `sylver.service` +
 `caddy.service`, and locks the firewall to SSH + 80/443.
 
 The server binds `127.0.0.1:7400` only — nothing reaches it except Caddy.
@@ -35,7 +35,7 @@ The server binds `127.0.0.1:7400` only — nothing reaches it except Caddy.
 ```bash
 dig +short hub.example.com                 # your box's IP
 curl -s https://hub.example.com/api/v1/me  # {"error":"unauthorized"}
-systemctl status sylvie-server caddy
+systemctl status sylver caddy
 ```
 
 ## 3. First device
@@ -51,7 +51,7 @@ That account is now permanent; every other device uses `sylvie login`.
 ## Layout on disk
 
 ```text
-/usr/local/bin/{sylvie,sylvie-server}   binaries
+/usr/local/bin/{sylvie,sylver}          binaries
 /etc/sylvie/sylvie.env                  server configuration
 /var/lib/sylvie/sylvie.db               database (users, secrets ciphertext)
 /var/lib/sylvie/files/                  file blobs
@@ -61,11 +61,11 @@ That account is now permanent; every other device uses `sylvie login`.
 
 ```bash
 SYLVIE_VERSION=vX.Y.Z bash -c 'set -e
-  curl -fL -o /usr/local/bin/sylvie-server \
-    https://github.com/liagha/sylvie/releases/download/$SYLVIE_VERSION/sylvie-server-x86_64-linux
+  curl -fL -o /usr/local/bin/sylver \
+    https://github.com/liagha/sylvie/releases/download/$SYLVIE_VERSION/sylver-x86_64-linux
   curl -fL -o /usr/local/bin/sylv \
     https://github.com/liagha/sylvie/releases/download/$SYLVIE_VERSION/sylvie-x86_64-linux
-  systemctl restart sylvie-server'
+  systemctl restart sylver'
 ```
 
 Migrations run automatically at startup. Back up before major jumps.

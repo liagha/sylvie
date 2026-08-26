@@ -5,7 +5,7 @@ JSON API backed by SQLite.
 
 ```text
 ┌───────────┐   HTTPS/HTTP   ┌───────────────────────────────┐
-│ sylvie    │ ─────────────► │ sylvie-server                 │
+│ sylvie    │ ─────────────► │ sylver (server)               │
 │ (client)  │ ◄───────────── │ axum router                   │
 └───────────┘                │  ├─ routes/auth    OPAQUE     │
                              │  ├─ routes/account bearer     │
@@ -28,7 +28,7 @@ Everything both sides must agree on, nothing either side owns:
 - `vault` — HKDF-SHA512 key derivation and XChaCha20-Poly1305 seal/open
 - `codec` — base64 variants and SHA-256 digests
 
-## server (`sylvie-server`)
+## server (`sylver`)
 
 Single process, single database.
 

@@ -1,11 +1,11 @@
 [package]
-name = "sylvie-server"
+name = "sylver"
 version.workspace = true
 license.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "sylvie-server"
+name = "sylver"
 path = "src/main.rs"
 
 [dependencies]

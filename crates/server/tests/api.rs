@@ -15,7 +15,7 @@ use sylvie_core::message::{
 };
 use sylvie_core::opaque::{self, Suite};
 use sylvie_core::vault;
-use sylvie_server::ctx::Limits;
+use sylver::ctx::Limits;
 
 const SMALL_LIMIT: u64 = 1024;
 use std::net::SocketAddr;
@@ -47,9 +47,9 @@ async fn spawn_limits(limits: Limits) -> Hub {
 async fn spawn_full(max_file: u64, limits: Limits) -> Hub {
     let dir = std::env::temp_dir().join(format!("sylvie-test-{}", uuid::Uuid::new_v4()));
     tokio::fs::create_dir_all(dir.join("files")).await.unwrap();
-    let pool = sylvie_server::db::open(&dir.join("test.db")).await.unwrap();
-    let ctx = sylvie_server::ctx::Ctx::build(pool, dir.join("files"), max_file, limits).await;
-    let app = sylvie_server::routes::build(ctx);
+    let pool = sylver::db::open(&dir.join("test.db")).await.unwrap();
+    let ctx = sylver::ctx::Ctx::build(pool, dir.join("files"), max_file, limits).await;
+    let app = sylver::routes::build(ctx);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
