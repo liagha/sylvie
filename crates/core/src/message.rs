@@ -15,6 +15,7 @@ pub struct BlobReply {
 pub struct RegisterFinish {
     pub username: String,
     pub message: String,
+    pub wrap: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -63,6 +64,22 @@ pub struct Me {
     pub secrets: u32,
     pub files: u32,
     pub devices: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct WrapValue {
+    pub data: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RekeyStart {
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RekeyFinish {
+    pub message: String,
+    pub wrap: String,
 }
 
 #[derive(Serialize, Deserialize)]

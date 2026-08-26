@@ -1,3 +1,4 @@
+use opaque_ke::rand::RngCore;
 use opaque_ke::rand::rngs::OsRng;
 use opaque_ke::{
     ClientLogin, ClientLoginFinishParameters, ClientRegistration,
@@ -8,7 +9,8 @@ use reqwest::Client;
 use sylvie_core::codec;
 use sylvie_core::error::Error;
 use sylvie_core::message::{
-    BlobReply, LoginFinish, LoginReply, LoginStart, RegisterFinish, RegisterStart, Sealed,
+    BlobReply, LoginFinish, LoginReply, LoginStart, RegisterFinish, RegisterStart, RekeyFinish,
+    RekeyStart, Sealed, WrapValue,
 };
 use sylvie_core::opaque::{self, Suite};
 use sylvie_core::vault;
@@ -19,6 +21,9 @@ const REGISTER_START: &str = "/api/v1/auth/register/start";
 const REGISTER_FINISH: &str = "/api/v1/auth/register/finish";
 const LOGIN_START: &str = "/api/v1/auth/login/start";
 const LOGIN_FINISH: &str = "/api/v1/auth/login/finish";
+const REKEY_START: &str = "/api/v1/auth/rekey/start";
+const REKEY_FINISH: &str = "/api/v1/auth/rekey/finish";
+const VAULT: &str = "/api/v1/vault";
 
 pub struct Session {
     pub token: String,
@@ -55,6 +60,10 @@ pub async fn register(
             ClientRegistrationFinishParameters::new(opaque::peer(user), None),
         )
         .map_err(|_| Error::Protocol)?;
+    let mut secret = [0u8; 32];
+    OsRng.fill_bytes(&mut secret);
+    let kek = vault::root(finished.export_key.as_slice(), vault::VAULT)?;
+    let wrap = vault::seal(&kek, &secret)?;
     let _: () = net::post(
         http,
         base,
@@ -63,10 +72,62 @@ pub async fn register(
         &RegisterFinish {
             username: user.to_string(),
             message: codec::encode(&finished.message.serialize()),
+            wrap: codec::encode(&wrap),
         },
     )
     .await?;
     login(http, base, user, password, None, Some(name)).await
+}
+
+pub async fn rekey(
+    http: &Client,
+    base: &str,
+    user: &str,
+    old: &str,
+    fresh: &str,
+    device: &str,
+    token: &str,
+) -> Result<(), Error> {
+    let session = login(http, base, user, old, Some(device), None).await?;
+    let kek_old = vault::root(&session.export, vault::VAULT)?;
+    let wrapped: WrapValue = net::get(http, base, VAULT, Some(token)).await?;
+    let secret = vault::open(&kek_old, &codec::decode(&wrapped.data)?)?;
+
+    let started = ClientRegistration::<Suite>::start(&mut OsRng, fresh.as_bytes())
+        .map_err(|_| Error::Protocol)?;
+    let reply: BlobReply = net::post(
+        http,
+        base,
+        REKEY_START,
+        Some(token),
+        &RekeyStart {
+            message: codec::encode(&started.message.serialize()),
+        },
+    )
+    .await?;
+    let finished = started
+        .state
+        .finish(
+            &mut OsRng,
+            fresh.as_bytes(),
+            opaque::reg_reply(&codec::decode(&reply.message)?)?,
+            ClientRegistrationFinishParameters::new(opaque::peer(user), None),
+        )
+        .map_err(|_| Error::Protocol)?;
+    let kek_new = vault::root(finished.export_key.as_slice(), vault::VAULT)?;
+    let wrap = vault::seal(&kek_new, &secret)?;
+    let _: () = net::post(
+        http,
+        base,
+        REKEY_FINISH,
+        Some(token),
+        &RekeyFinish {
+            message: codec::encode(&finished.message.serialize()),
+            wrap: codec::encode(&wrap),
+        },
+    )
+    .await?;
+    Ok(())
 }
 
 pub async fn login(

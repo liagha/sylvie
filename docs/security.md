@@ -31,11 +31,18 @@ Not defended against:
 ```text
 password (human, never transmitted)
    └─ OPAQUE export_key            deterministic per password, client-only
-       └─ HKDF "sylvie/vault"      XChaCha20-Poly1305 key for secret values
+       └─ HKDF "sylvie/vault"      KEK: wraps/unwraps the vault secret
+vault_secret                       32 random bytes, generated client-side
+   └─ HKDF "sylvie/data"           XChaCha20-Poly1305 key for secret values
 login session_key (ephemeral)
    └─ HKDF "sylvie/channel"        seals the login reply (token delivery)
 bearer token                       256-bit random, stored sha256(token)
 ```
+
+Because secret values are sealed under the vault secret — not directly under
+the password — `sylvie passwd` re-wraps one 32-byte blob on rotation and
+every existing secret stays readable. The server stores only the wrapped
+form.
 
 No key ever touches the server disk: the vault key exists only inside CLI
 processes for the duration of one command.
@@ -75,15 +82,13 @@ machine are gone regardless.
    and counts each proxy IP as itself unless real client IPs are forwarded
    and extracted.
 3. Single user; no sharing model; no audit log beyond tracing output.
-4. No password change flow. Re-registering over the account today would
-   orphan existing secrets (their vault key dies with the old password).
-5. Secret names and file contents readable server-side (see above).
-6. Pending-login states live in RAM; restarting the server drops half-finished
+4. Secret names and file contents readable server-side (see above).
+5. Pending-login states live in RAM; restarting the server drops half-finished
    logins (clients simply retry — harmless, but worth knowing).
-7. Tokens never expire by default; set `SYLVIE_SESSION_TTL_DAYS` for expiry,
+6. Tokens never expire by default; set `SYLVIE_SESSION_TTL_DAYS` for expiry,
    or rely on revocation.
-8. The crypto stack is modern and standard (opaque-ke 4, RFC 9807; Ring-free
-   RustCrypto AEAD), but v0.1 has seen no external review.
+7. The crypto stack is modern and standard (opaque-ke 4, RFC 9807; RustCrypto
+   AEAD), but Sylvie has seen no external review.
 
 ## Upgrades this design anticipates
 

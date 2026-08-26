@@ -5,7 +5,7 @@ use reqwest::Client;
 
 use sylvie_core::codec;
 use sylvie_core::error::Error;
-use sylvie_core::message::{SecretItem, SecretPut, SecretValue};
+use sylvie_core::message::{SecretItem, SecretPut, SecretValue, WrapValue};
 use sylvie_core::vault;
 
 use crate::ask;
@@ -14,6 +14,7 @@ use crate::net;
 use crate::session;
 
 const BASE: &str = "/api/v1/secrets";
+const VAULT: &str = "/api/v1/vault";
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -45,7 +46,10 @@ async fn unlock(http: &Client) -> Result<(Config, Vec<u8>), Error> {
         None,
     )
     .await?;
-    let key = vault::root(&session.export, vault::VAULT)?;
+    let kek = vault::root(&session.export, vault::VAULT)?;
+    let wrapped: WrapValue = net::get(http, &stored.url, VAULT, Some(&stored.token)).await?;
+    let secret = vault::open(&kek, &codec::decode(&wrapped.data)?)?;
+    let key = vault::root(&secret, vault::DATA)?;
     Ok((stored, key))
 }
 

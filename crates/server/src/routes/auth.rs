@@ -11,7 +11,7 @@ use sylvie_core::codec;
 use sylvie_core::error::Error;
 use sylvie_core::message::{
     BlobReply, Device, Grant, LoginFinish, LoginReply, LoginStart, Me, RegisterFinish,
-    RegisterStart, Sealed,
+    RegisterStart, RekeyFinish, RekeyStart, Sealed, WrapValue,
 };
 use sylvie_core::opaque::{self, Suite};
 use sylvie_core::vault;
@@ -64,10 +64,11 @@ pub async fn register_finish(
     let record = ServerRegistration::<Suite>::finish(give);
     let mut tx = ctx.db().begin().await.map_err(internal)?;
     unclaimed(&mut *tx).await?;
-    sqlx::query("insert into users(id, username, record, created) values (?, ?, ?, ?)")
+    sqlx::query("insert into users(id, username, record, wrap, created) values (?, ?, ?, ?, ?)")
         .bind(Uuid::new_v4().to_string())
         .bind(&req.username)
         .bind(record.serialize().to_vec())
+        .bind(codec::decode(&req.wrap)?)
         .bind(stamp())
         .execute(&mut *tx)
         .await
@@ -154,6 +155,54 @@ pub async fn login_finish(
     );
     Ok(Json(Sealed {
         data: codec::encode(&sealed),
+    }))
+}
+
+pub async fn rekey_start(
+    State(ctx): State<Ctx>,
+    account: Account,
+    Json(req): Json<RekeyStart>,
+) -> Result<Json<BlobReply>, Failure> {
+    let (username,): (String,) = sqlx::query_as("select username from users where id = ?")
+        .bind(&account.owner)
+        .fetch_one(ctx.db())
+        .await
+        .map_err(internal)?;
+    let ask = opaque::reg_ask(&blob(&req.message)?)?;
+    let started = ServerRegistration::<Suite>::start(ctx.setup(), ask, username.as_bytes())
+        .map_err(|_| Error::Request)?;
+    Ok(Json(BlobReply {
+        message: codec::encode(&started.message.serialize()),
+    }))
+}
+
+pub async fn rekey_finish(
+    State(ctx): State<Ctx>,
+    account: Account,
+    Json(req): Json<RekeyFinish>,
+) -> Result<StatusCode, Failure> {
+    let give = opaque::reg_give(&blob(&req.message)?)?;
+    let record = ServerRegistration::<Suite>::finish(give);
+    sqlx::query("update users set record = ?, wrap = ? where id = ?")
+        .bind(record.serialize().to_vec())
+        .bind(codec::decode(&req.wrap)?)
+        .bind(&account.owner)
+        .execute(ctx.db())
+        .await
+        .map_err(internal)?;
+    tracing::info!(owner = %account.owner, "password changed");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn vault(State(ctx): State<Ctx>, account: Account) -> Result<Json<WrapValue>, Failure> {
+    let row: Option<(Option<Vec<u8>>,)> = sqlx::query_as("select wrap from users where id = ?")
+        .bind(&account.owner)
+        .fetch_optional(ctx.db())
+        .await
+        .map_err(internal)?;
+    let data = row.ok_or(Error::Missing)?.0.ok_or(Error::Protocol)?;
+    Ok(Json(WrapValue {
+        data: codec::encode(&data),
     }))
 }
 

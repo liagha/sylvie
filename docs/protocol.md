@@ -19,11 +19,35 @@ POST /api/v1/auth/register/start
 → { message }                              message = RegistrationResponse
 
 POST /api/v1/auth/register/finish
-  { username, message }                    message = RegistrationUpload
+  { username, message, wrap }              message = RegistrationUpload
 → 204
 ```
 
-The client keeps its `export_key` from the finish step.
+The client generates a random 32-byte vault secret at registration and sends
+`wrap` = the vault secret sealed under `HKDF-SHA512(export_key, "sylvie/vault")`.
+It keeps its `export_key` from the finish step.
+
+## Password change (rekey)
+
+Authenticated with an existing bearer token; two OPAQUE registrations happen,
+one to prove knowledge of the old password (a login), one to install the new
+one:
+
+```text
+GET /api/v1/vault                        → { data }   data = stored wrap
+
+POST /api/v1/auth/rekey/start            bearer required
+  { message }                            message = RegistrationRequest (new password)
+→ { message }                            message = RegistrationResponse
+
+POST /api/v1/auth/rekey/finish           bearer required
+  { message, wrap }                      wrap sealed under the NEW export key
+→ 204                                     users.record + users.wrap replaced atomically-ish
+```
+
+The client unwraps the vault secret with the old key and re-wraps it under the
+new one; secret ciphertext is never touched. Existing sessions and devices
+survive; other devices simply re-login with the new password.
 
 ## Login
 

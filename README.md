@@ -89,6 +89,7 @@ sylvie file delete <id>
 sylvie device list
 sylvie device revoke <id>
 
+sylvie passwd                     # rotate password; secrets survive via vault re-wrap
 sylvie logout
 ```
 

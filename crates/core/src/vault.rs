@@ -10,6 +10,7 @@ use sha2::Sha512;
 use crate::error::Error;
 
 pub const VAULT: &[u8] = b"sylvie/vault";
+pub const DATA: &[u8] = b"sylvie/data";
 pub const CHANNEL: &[u8] = b"sylvie/channel";
 
 const KEY: usize = 32;

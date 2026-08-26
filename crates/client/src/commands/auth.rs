@@ -80,6 +80,33 @@ pub async fn login(
     report(&session.device, json)
 }
 
+pub async fn passwd(http: &Client, fresh: Option<String>, json: bool) -> Result<(), Error> {
+    let config = stored()?;
+    let old = match std::env::var("SYLVIE_PASSWORD") {
+        Ok(value) => value,
+        Err(_) => ask::hidden("current password"),
+    };
+    let secret = match fresh {
+        Some(value) => value,
+        None => ask::hidden_twice("new password"),
+    };
+    if secret.len() < 8 {
+        return Err(Error::Internal("password too short (min 8)".into()));
+    }
+    session::rekey(
+        http,
+        &config.url,
+        &config.user,
+        &old,
+        &secret,
+        &config.device,
+        &config.token,
+    )
+    .await?;
+    say("password changed", json)?;
+    Ok(())
+}
+
 pub async fn logout(http: &Client, json: bool) -> Result<(), Error> {
     let config = stored()?;
     net::remove(

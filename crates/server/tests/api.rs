@@ -1,3 +1,4 @@
+use opaque_ke::rand::RngCore;
 use opaque_ke::rand::rngs::OsRng;
 use opaque_ke::{
     ClientLogin, ClientLoginFinishParameters, ClientRegistration,
@@ -10,7 +11,7 @@ use serde::de::DeserializeOwned;
 use sylvie_core::codec;
 use sylvie_core::message::{
     BlobReply, Device, FileItem, Grant, LoginFinish, LoginReply, LoginStart, Me, RegisterFinish,
-    RegisterStart, SecretItem, SecretPut, SecretValue,
+    RegisterStart, RekeyFinish, RekeyStart, SecretItem, SecretPut, SecretValue, WrapValue,
 };
 use sylvie_core::opaque::{self, Suite};
 use sylvie_core::vault;
@@ -124,6 +125,7 @@ struct Authed {
     token: String,
     device: String,
     export: Vec<u8>,
+    vault: Vec<u8>,
 }
 
 async fn register(hub: &Hub, user: &str, password: &str, name: &str) -> Authed {
@@ -148,6 +150,10 @@ async fn register(hub: &Hub, user: &str, password: &str, name: &str) -> Authed {
             ClientRegistrationFinishParameters::new(opaque::peer(user), None),
         )
         .unwrap();
+    let mut vault_secret = [0u8; 32];
+    OsRng.fill_bytes(&mut vault_secret);
+    let kek = vault::root(finished.export_key.as_slice(), vault::VAULT).unwrap();
+    let wrap = codec::encode(&vault::seal(&kek, &vault_secret).unwrap());
     let _ = json::<RegisterFinish, ()>(
         hub,
         Method::POST,
@@ -156,10 +162,13 @@ async fn register(hub: &Hub, user: &str, password: &str, name: &str) -> Authed {
         &RegisterFinish {
             username: user.to_string(),
             message: codec::encode(&finished.message.serialize()),
+            wrap,
         },
     )
     .await;
-    login(hub, user, password, None, Some(name)).await.unwrap()
+    let mut authed = login(hub, user, password, None, Some(name)).await.unwrap();
+    authed.vault = vault_secret.to_vec();
+    authed
 }
 
 async fn login(
@@ -213,6 +222,7 @@ async fn login(
         token: grant.token,
         device: grant.device,
         export: finished.export_key.as_slice().to_vec(),
+        vault: Vec::new(),
     })
 }
 
@@ -328,7 +338,7 @@ async fn revoked_device_loses_access() {
 async fn secrets_roundtrip_and_authorization() {
     let hub = spawn().await;
     let authed = register(&hub, "alee", "correct horse", "laptop").await;
-    let key = vault::root(&authed.export, vault::VAULT).unwrap();
+    let key = vault::root(&authed.vault, vault::DATA).unwrap();
 
     let data = vault::seal(&key, b"github token value").unwrap();
     let (status, _): (_, Option<()>) = json(
@@ -382,7 +392,7 @@ async fn secrets_roundtrip_and_authorization() {
 async fn tampered_ciphertext_detected() {
     let hub = spawn().await;
     let attacker = register(&hub, "alee", "correct horse", "laptop").await;
-    let key = vault::root(&attacker.export, vault::VAULT).unwrap();
+    let key = vault::root(&attacker.vault, vault::DATA).unwrap();
 
     let mut data = vault::seal(&key, b"private").unwrap();
     let last = data.len() - 1;
@@ -542,4 +552,114 @@ async fn expired_session_rejected() {
     let authed = register(&hub, "alee", "correct horse", "laptop").await;
     let (status, _) = plain::<Me>(&hub, Method::GET, "/api/v1/me", Some(&authed.token)).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn rekey_requires_session() {
+    let hub = spawn().await;
+    register(&hub, "alee", "correct horse", "laptop").await;
+    let started = ClientRegistration::<Suite>::start(&mut OsRng, b"whatever123").unwrap();
+    let (status, _): (_, Option<BlobReply>) = json(
+        &hub,
+        Method::POST,
+        "/api/v1/auth/rekey/start",
+        None,
+        &RekeyStart {
+            message: codec::encode(&started.message.serialize()),
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn rekey_rotates_kek_keeps_data_and_sessions() {
+    let hub = spawn().await;
+    let authed = register(&hub, "alee", "old password 1", "laptop").await;
+    let data_key = vault::root(&authed.vault, vault::DATA).unwrap();
+    let data = vault::seal(&data_key, b"precious").unwrap();
+    let _ = json::<SecretPut, ()>(
+        &hub,
+        Method::PUT,
+        "/api/v1/secrets/note",
+        Some(&authed.token),
+        &SecretPut {
+            data: codec::encode(&data),
+        },
+    )
+    .await;
+
+    let unlock = login(&hub, "alee", "old password 1", Some(&authed.device), None)
+        .await
+        .unwrap();
+    let (_, wrapped): (_, Option<WrapValue>) =
+        plain(&hub, Method::GET, "/api/v1/vault", Some(&authed.token)).await;
+    let kek_old = vault::root(&unlock.export, vault::VAULT).unwrap();
+    let vault_secret =
+        vault::open(&kek_old, &codec::decode(&wrapped.unwrap().data).unwrap()).unwrap();
+    assert_eq!(vault_secret, authed.vault);
+
+    let fresh = "new password 2";
+    let started = ClientRegistration::<Suite>::start(&mut OsRng, fresh.as_bytes()).unwrap();
+    let (_, reply): (_, Option<BlobReply>) = json(
+        &hub,
+        Method::POST,
+        "/api/v1/auth/rekey/start",
+        Some(&authed.token),
+        &RekeyStart {
+            message: codec::encode(&started.message.serialize()),
+        },
+    )
+    .await;
+    let finished = started
+        .state
+        .finish(
+            &mut OsRng,
+            fresh.as_bytes(),
+            opaque::reg_reply(&codec::decode(&reply.unwrap().message).unwrap()).unwrap(),
+            ClientRegistrationFinishParameters::new(opaque::peer("alee"), None),
+        )
+        .unwrap();
+    let kek_new = vault::root(finished.export_key.as_slice(), vault::VAULT).unwrap();
+    let wrap_new = vault::seal(&kek_new, &vault_secret).unwrap();
+    let (status, _): (_, Option<()>) = json(
+        &hub,
+        Method::POST,
+        "/api/v1/auth/rekey/finish",
+        Some(&authed.token),
+        &RekeyFinish {
+            message: codec::encode(&finished.message.serialize()),
+            wrap: codec::encode(&wrap_new),
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    assert!(
+        login(&hub, "alee", "old password 1", None, None)
+            .await
+            .is_err()
+    );
+    let renewed = login(&hub, "alee", fresh, Some(&authed.device), None)
+        .await
+        .unwrap();
+    assert_eq!(renewed.export, finished.export_key.as_slice());
+
+    let (_, wrapped): (_, Option<WrapValue>) =
+        plain(&hub, Method::GET, "/api/v1/vault", Some(&authed.token)).await;
+    let unwrapped = vault::open(&kek_new, &codec::decode(&wrapped.unwrap().data).unwrap()).unwrap();
+    assert_eq!(unwrapped, vault_secret);
+
+    let (_, value): (_, Option<SecretValue>) = plain(
+        &hub,
+        Method::GET,
+        "/api/v1/secrets/note",
+        Some(&authed.token),
+    )
+    .await;
+    let opened = vault::open(&data_key, &codec::decode(&value.unwrap().data).unwrap()).unwrap();
+    assert_eq!(opened, b"precious");
+
+    let (status, _) = plain::<Me>(&hub, Method::GET, "/api/v1/me", Some(&authed.token)).await;
+    assert_eq!(status, StatusCode::OK);
 }
