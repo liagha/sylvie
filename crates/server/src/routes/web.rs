@@ -12,8 +12,8 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Form, Router};
 use pardeh::{
-    Node, Signals, a, button, div, form, h1, input, script, span, table, tbody, td, textarea, th,
-    tr,
+    Item, Node, Signals, a, button, card, div, field, form, h1, input, list, script, span, table,
+    tbody, td, textarea, th, tr,
 };
 
 use sqlx::SqlitePool;
@@ -25,52 +25,10 @@ use crate::routes::{ident, sane};
 
 const COOKIE: &str = "sylvie_token";
 
-#[derive(Clone)]
-struct Item {
-    key: String,
-    label: String,
-    meta: String,
-}
-
 pub fn seed(app: &pardeh::App) {
     app.signals().define("devices", Vec::<Item>::new());
     app.signals().define("secrets", Vec::<Item>::new());
     app.signals().define("files", Vec::<Item>::new());
-}
-
-fn list_region(
-    key: &'static str,
-    empty: &'static str,
-    action: &'static str,
-    action_label: &'static str,
-) -> impl Fn(&Signals) -> Node {
-    move |signals: &Signals| {
-        let rows = signals.get::<Vec<Item>>(key);
-        let body = if rows.is_empty() {
-            tr().kid(
-                td().attr("colspan", "4")
-                    .kid(span().class("muted").text(empty)),
-            )
-        } else {
-            tbody().kids(rows.iter().map(|item| {
-                tr().kid(td().text(item.label.clone()))
-                    .kid(td().kid(span().class("muted").text(item.meta.clone())))
-                    .kid(td().class("mono").text(item.key.clone()))
-                    .kid(
-                        td().kid(
-                            form()
-                                .class("inline")
-                                .attr("method", "post")
-                                .attr("action", format!("{action}/{}", item.key))
-                                .kid(button().attr("type", "submit").text(action_label)),
-                        ),
-                    )
-            }))
-        };
-        table()
-            .kid(tr().kid(th()).kid(th()).kid(th()).kid(th()))
-            .kid(tbody().kid(body))
-    }
 }
 
 fn file_region(key: &'static str, empty: &'static str) -> impl Fn(&Signals) -> Node {
@@ -112,14 +70,6 @@ fn file_region(key: &'static str, empty: &'static str) -> impl Fn(&Signals) -> N
             )
             .kid(tbody().kid(body))
     }
-}
-
-fn card(title: &'static str, region: Node, tools: Option<Node>) -> Node {
-    div()
-        .class("card")
-        .kid(div().class("head").kid(h1().text(title)))
-        .kid(tools.unwrap_or_else(div))
-        .kid(region)
 }
 
 fn styles() -> Node {
@@ -165,16 +115,6 @@ fn app_script() -> Node {
         .attr("src", "/assets/shell.js")
 }
 
-fn field(label: &str, name: &str, kind: &str, placeholder: &str) -> Node {
-    div().class("field").kid(span().text(label)).kid(
-        input()
-            .attr("type", kind)
-            .attr("name", name)
-            .attr("placeholder", placeholder)
-            .attr("autocomplete", "off"),
-    )
-}
-
 fn dashboard(signals: &Signals) -> Node {
     div().kid(styles()).kid(app_script()).kid(
         div()
@@ -190,7 +130,7 @@ fn dashboard(signals: &Signals) -> Node {
                 "devices",
                 signals.region(
                     "devices",
-                    list_region("devices", "no devices yet", "/web/device", "revoke"),
+                    list("devices", "no devices yet", "/web/device", "revoke"),
                 ),
                 None,
             ))
@@ -198,7 +138,7 @@ fn dashboard(signals: &Signals) -> Node {
                 "secrets",
                 signals.region(
                     "secrets",
-                    list_region("secrets", "no secrets yet", "/web/secret", "delete"),
+                    list("secrets", "no secrets yet", "/web/secret", "delete"),
                 ),
                 Some(secret_tools()),
             ))
