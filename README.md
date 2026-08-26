@@ -61,13 +61,13 @@ rejected. Additional machines join by logging in.
 ## First device
 
 ```bash
-sylvie register --url http://host:7400 --user alee
+sylvie register --url http://host:7400 --user <you>
 ```
 
 Prompts for a password and a device name. Later machines:
 
 ```bash
-sylvie login --url http://host:7400 --user alee
+sylvie login --url http://host:7400 --user <you>
 ```
 
 ## Usage

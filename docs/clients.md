@@ -7,8 +7,8 @@ One account, unlimited devices, each revocable with `sylvie device revoke`.
 ```bash
 cargo install --git https://github.com/liagha/sylvie --bin sylvie
 # or grab a prebuilt Linux binary from GitHub Releases
-sylvie register --url https://hub.example.com --user alee   # first machine only
-sylvie login    --url https://hub.example.com --user alee   # every other machine
+sylvie register --url https://hub.example.com --user <you>   # first machine only
+sylvie login    --url https://hub.example.com --user <you>   # every other machine
 ```
 
 ## Android (Termux) — full client today
@@ -18,7 +18,7 @@ Termux runs the real CLI natively:
 ```bash
 pkg update && pkg install rust git openssl
 cargo install --git https://github.com/liagha/sylvie --bin sylvie
-sylvie login --url https://hub.example.com --user alee
+sylvie login --url https://hub.example.com --user <you>
 ```
 
 Build takes a few minutes on-device; afterwards you have full read/write:

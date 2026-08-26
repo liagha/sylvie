@@ -7,9 +7,11 @@ block in the Caddyfile).
 
 ## 0. Prerequisites
 
-- a VM anywhere you can SSH into as root — Debian 12 or Ubuntu 22.04+,
+- an x86_64 VM you can SSH into as root — Debian 12 or Ubuntu 22.04+,
   1 GB RAM is plenty. Local providers give better latency for `.ir`;
   international hosts work too but some restrict Iranian signups.
+  (ARM boxes work too, but you build the binaries yourself — see
+  docs/clients.md.)
 - DNS: an `A` record for `hub.example.com` → the VM's IPv4 address (and `AAAA`
   if you want v6). Caddy obtains certificates automatically once DNS and
   port 80/443 reach the box.
@@ -41,7 +43,7 @@ systemctl status sylvie-server caddy
 From any machine with the CLI:
 
 ```bash
-sylvie register --url https://hub.example.com --user alee
+sylvie register --url https://hub.example.com --user <you>
 ```
 
 That account is now permanent; every other device uses `sylvie login`.

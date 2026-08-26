@@ -12,11 +12,13 @@ fi
 VERSION=${SYLVIE_VERSION:-v0.2.0}
 BASE_URL="https://github.com/liagha/sylvie/releases/download/${VERSION}"
 
-case "$(uname -m)" in
-    x86_64) ARCH="x86_64-linux" ;;
-    aarch64 | arm64) ARCH="aarch64-linux" ;;
-    *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
-esac
+if [[ $(uname -m) != x86_64 ]]; then
+    echo "prebuilt binaries ship for x86_64 only."
+    echo "on other architectures install Rust and: cargo install --git https://github.com/liagha/sylvie"
+    echo "see docs/clients.md" >&2
+    exit 1
+fi
+ARCH="x86_64-linux"
 
 echo "== packages"
 export DEBIAN_FRONTEND=noninteractive
