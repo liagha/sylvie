@@ -76,6 +76,7 @@ echo "== services and firewall"
 systemctl daemon-reload
 systemctl enable --now sylver.service
 systemctl enable --now caddy.service
+systemctl reload-or-restart caddy.service
 ufw allow openssh >/dev/null 2>&1 || true
 ufw allow 80,443/tcp >/dev/null 2>&1 || true
 yes | ufw enable >/dev/null 2>&1 || true
