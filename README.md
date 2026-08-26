@@ -125,3 +125,7 @@ detection, password rotation preserving secrets, and file integrity.
 - plain HTTP — put a TLS reverse proxy in front for anything beyond localhost
 - single user; rate-limit state is in-memory and resets on restart
 - no external security review yet — read docs/security.md before trusting it
+
+## License
+
+[MIT](LICENSE)
