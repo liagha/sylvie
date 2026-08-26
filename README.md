@@ -51,6 +51,9 @@ Configuration via environment variables (all optional):
 | `SYLVIE_STORAGE_PATH`  | `$XDG_DATA_HOME/sylvie/files`    |
 | `SYLVIE_LOG_LEVEL`     | `info`                           |
 | `SYLVIE_MAX_FILE_SIZE` | `268435456` (256 MiB)            |
+| `SYLVIE_AUTH_ATTEMPTS` | `10` per IP+username per window  |
+| `SYLVIE_AUTH_WINDOW_SECS` | `300`                         |
+| `SYLVIE_SESSION_TTL_DAYS` | unset (sessions never expire) |
 
 The first account created becomes the only account; further registrations are
 rejected. Additional machines join by logging in.

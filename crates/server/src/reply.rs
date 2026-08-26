@@ -34,6 +34,7 @@ impl IntoResponse for Failure {
             Error::Missing => StatusCode::NOT_FOUND,
             Error::Conflict => StatusCode::CONFLICT,
             Error::Large => StatusCode::PAYLOAD_TOO_LARGE,
+            Error::Flood => StatusCode::TOO_MANY_REQUESTS,
             Error::Crypto | Error::Protocol | Error::Internal(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }

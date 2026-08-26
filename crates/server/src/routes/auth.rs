@@ -1,5 +1,5 @@
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{ConnectInfo, State};
 use axum::http::StatusCode;
 use opaque_ke::rand::RngCore;
 use opaque_ke::rand::rngs::OsRng;
@@ -21,9 +21,18 @@ use crate::ctx::{Ctx, Pending};
 use crate::reply::{Failure, internal};
 use crate::routes::account::Account;
 use crate::routes::sane;
+use std::net::SocketAddr;
 
 fn sql<E: std::fmt::Display>(error: E) -> Error {
     Error::Internal(error.to_string())
+}
+
+fn gate(ctx: &Ctx, peer: SocketAddr, user: &str) -> Result<(), Failure> {
+    let key = format!("{}:{user}", peer.ip());
+    ctx.admit(&key)
+        .then_some(())
+        .ok_or(Error::Flood)
+        .map_err(Failure::from)
 }
 
 fn blob(text: &str) -> Result<Vec<u8>, Failure> {
@@ -32,9 +41,11 @@ fn blob(text: &str) -> Result<Vec<u8>, Failure> {
 
 pub async fn register_start(
     State(ctx): State<Ctx>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(req): Json<RegisterStart>,
 ) -> Result<Json<BlobReply>, Failure> {
     sane(&req.username, 64).ok_or(Error::Request)?;
+    gate(&ctx, peer, &req.username)?;
     unclaimed(ctx.db()).await?;
     let ask = opaque::reg_ask(&blob(&req.message)?)?;
     let started = ServerRegistration::<Suite>::start(ctx.setup(), ask, req.username.as_bytes())
@@ -68,9 +79,11 @@ pub async fn register_finish(
 
 pub async fn login_start(
     State(ctx): State<Ctx>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Json(req): Json<LoginStart>,
 ) -> Result<Json<LoginReply>, Failure> {
     sane(&req.username, 64).ok_or(Error::Request)?;
+    gate(&ctx, peer, &req.username)?;
     let row: Option<(Vec<u8>,)> = sqlx::query_as("select record from users where username = ?")
         .bind(&req.username)
         .fetch_optional(ctx.db())

@@ -14,6 +14,8 @@ pub enum Error {
     Conflict,
     #[error("payload exceeds limit")]
     Large,
+    #[error("too many attempts")]
+    Flood,
     #[error("cryptographic failure")]
     Crypto,
     #[error("protocol violation")]
@@ -31,6 +33,7 @@ impl Error {
             Self::Missing => "not_found",
             Self::Conflict => "conflict",
             Self::Large => "too_large",
+            Self::Flood => "rate_limited",
             Self::Crypto => "crypto",
             Self::Protocol => "protocol",
             Self::Internal(_) => "internal",
@@ -45,6 +48,7 @@ impl Error {
             "not_found" => Self::Missing,
             "conflict" => Self::Conflict,
             "too_large" => Self::Large,
+            "rate_limited" => Self::Flood,
             "crypto" => Self::Crypto,
             "protocol" => Self::Protocol,
             _ => Self::Internal("remote failure".into()),

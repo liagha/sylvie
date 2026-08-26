@@ -70,15 +70,18 @@ machine are gone regardless.
 
 1. Plain HTTP. Behind a reverse proxy with TLS the story is strong; exposed
    bare, an active attacker can strip/replay traffic.
-2. No rate limiting on `auth/login/start`; Argon2id makes guessing slow per
-   attempt but nothing throttles or locks attempts.
+2. Rate limiting exists (`auth/register/start`, `auth/login/start`; default
+   10 per IP+username per 5 minutes) but is in-memory: it resets on restart
+   and counts each proxy IP as itself unless real client IPs are forwarded
+   and extracted.
 3. Single user; no sharing model; no audit log beyond tracing output.
 4. No password change flow. Re-registering over the account today would
    orphan existing secrets (their vault key dies with the old password).
 5. Secret names and file contents readable server-side (see above).
 6. Pending-login states live in RAM; restarting the server drops half-finished
    logins (clients simply retry — harmless, but worth knowing).
-7. Tokens never expire; a leaked-but-unnoticed token works until revoked.
+7. Tokens never expire by default; set `SYLVIE_SESSION_TTL_DAYS` for expiry,
+   or rely on revocation.
 8. The crypto stack is modern and standard (opaque-ke 4, RFC 9807; Ring-free
    RustCrypto AEAD), but v0.1 has seen no external review.
 

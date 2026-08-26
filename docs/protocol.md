@@ -3,7 +3,10 @@
 All endpoints live under `/api/v1`. Requests and responses are JSON unless
 stated otherwise. Errors are `{"error": code}` with an appropriate status:
 `bad_request`, `unauthorized`, `forbidden`, `not_found`, `conflict`,
-`too_large`, `crypto`, `protocol`, `internal`.
+`too_large`, `rate_limited` (429), `crypto`, `protocol`, `internal`.
+
+Registration and login starts are throttled per source IP and username
+(default 10 attempts per 5 minutes; see README for the env knobs).
 
 Binary OPAQUE messages travel base64-encoded inside the `message` field of
 JSON objects. All blobs below are that encoding.

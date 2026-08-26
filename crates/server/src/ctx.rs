@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use opaque_ke::rand::rngs::OsRng;
 use sqlx::SqlitePool;
@@ -11,25 +12,49 @@ use sylvie_core::opaque::{LogState, Setup};
 
 const PENDING_TTL: u64 = 300;
 
+#[derive(Clone, Copy)]
+pub struct Limits {
+    pub attempts: u32,
+    pub window: Duration,
+    pub session_ttl: Option<Duration>,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            attempts: u32::MAX,
+            window: Duration::from_secs(300),
+            session_ttl: None,
+        }
+    }
+}
+
 pub struct Pending {
     pub login: LogState,
     pub user: String,
     pub born: Instant,
 }
 
-pub(crate) struct Inner {
+struct Strike {
+    count: u32,
+    born: Instant,
+}
+
+struct Inner {
     db: SqlitePool,
     setup: Setup,
     storage: PathBuf,
     max_file: u64,
+    limits: Limits,
     pendings: Mutex<HashMap<String, Pending>>,
+    floods: Mutex<HashMap<String, Strike>>,
 }
 
 #[derive(Clone)]
 pub struct Ctx(Arc<Inner>);
 
 impl Ctx {
-    pub async fn build(db: SqlitePool, storage: PathBuf, max_file: u64) -> Self {
+    pub async fn build(db: SqlitePool, storage: PathBuf, max_file: u64, limits: Limits) -> Self {
         let setup = match load_setup(&db).await {
             Ok(setup) => setup,
             Err(error) => panic!("server setup: {error}"),
@@ -39,7 +64,9 @@ impl Ctx {
             setup,
             storage,
             max_file,
+            limits,
             pendings: Mutex::new(HashMap::new()),
+            floods: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -53,6 +80,25 @@ impl Ctx {
 
     pub fn max_file(&self) -> u64 {
         self.0.max_file
+    }
+
+    pub fn limits(&self) -> Limits {
+        self.0.limits
+    }
+
+    pub fn admit(&self, key: &str) -> bool {
+        let mut floods = self.0.floods.lock().expect("flood lock");
+        let now = Instant::now();
+        let strike = floods.entry(key.to_string()).or_insert(Strike {
+            count: 0,
+            born: now,
+        });
+        if now.duration_since(strike.born) >= self.0.limits.window {
+            strike.count = 0;
+            strike.born = now;
+        }
+        strike.count += 1;
+        strike.count <= self.0.limits.attempts
     }
 
     pub fn pending_insert(&self, id: String, pending: Pending) {
@@ -89,3 +135,5 @@ async fn load_setup(db: &SqlitePool) -> Result<Setup, Error> {
         .map_err(|e| Error::Internal(e.to_string()))?;
     Ok(setup)
 }
+
+pub type Peer = SocketAddr;

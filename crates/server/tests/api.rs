@@ -14,8 +14,11 @@ use sylvie_core::message::{
 };
 use sylvie_core::opaque::{self, Suite};
 use sylvie_core::vault;
+use sylvie_server::ctx::Limits;
 
 const SMALL_LIMIT: u64 = 1024;
+use std::net::SocketAddr;
+use std::time::Duration;
 
 struct Hub {
     base: String,
@@ -29,19 +32,32 @@ impl Drop for Hub {
 }
 
 async fn spawn() -> Hub {
-    spawn_with(256 * 1024 * 1024).await
+    spawn_full(256 * 1024 * 1024, Limits::default()).await
 }
 
 async fn spawn_with(max_file: u64) -> Hub {
+    spawn_full(max_file, Limits::default()).await
+}
+
+async fn spawn_limits(limits: Limits) -> Hub {
+    spawn_full(256 * 1024 * 1024, limits).await
+}
+
+async fn spawn_full(max_file: u64, limits: Limits) -> Hub {
     let dir = std::env::temp_dir().join(format!("sylvie-test-{}", uuid::Uuid::new_v4()));
     tokio::fs::create_dir_all(dir.join("files")).await.unwrap();
     let pool = sylvie_server::db::open(&dir.join("test.db")).await.unwrap();
-    let ctx = sylvie_server::ctx::Ctx::build(pool, dir.join("files"), max_file).await;
+    let ctx = sylvie_server::ctx::Ctx::build(pool, dir.join("files"), max_file, limits).await;
     let app = sylvie_server::routes::build(ctx);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap();
     });
     Hub {
         base: format!("http://{addr}"),
@@ -464,4 +480,66 @@ fn net_query(text: &str) -> String {
             }
         })
         .collect()
+}
+
+#[tokio::test]
+async fn login_flood_gated() {
+    let hub = spawn_limits(Limits {
+        attempts: 2,
+        window: Duration::from_secs(60),
+        session_ttl: None,
+    })
+    .await;
+    for _ in 0..2 {
+        let (status, _): (_, Option<LoginReply>) = json(
+            &hub,
+            Method::POST,
+            "/api/v1/auth/login/start",
+            None,
+            &LoginStart {
+                username: "ghost".into(),
+                message: "broken".into(),
+            },
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    let (status, _): (_, Option<LoginReply>) = json(
+        &hub,
+        Method::POST,
+        "/api/v1/auth/login/start",
+        None,
+        &LoginStart {
+            username: "ghost".into(),
+            message: "broken".into(),
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+
+    let (status, _): (_, Option<LoginReply>) = json(
+        &hub,
+        Method::POST,
+        "/api/v1/auth/login/start",
+        None,
+        &LoginStart {
+            username: "other".into(),
+            message: "broken".into(),
+        },
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn expired_session_rejected() {
+    let hub = spawn_limits(Limits {
+        attempts: 10,
+        window: Duration::from_secs(60),
+        session_ttl: Some(Duration::ZERO),
+    })
+    .await;
+    let authed = register(&hub, "alee", "correct horse", "laptop").await;
+    let (status, _) = plain::<Me>(&hub, Method::GET, "/api/v1/me", Some(&authed.token)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
