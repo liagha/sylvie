@@ -3,6 +3,7 @@ pub mod auth;
 pub mod device;
 pub mod file;
 pub mod secret;
+pub mod web;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -28,6 +29,7 @@ pub(crate) fn ident(raw: &str) -> Result<String, Error> {
 
 pub fn build(ctx: Ctx) -> Router {
     let limit = ctx.max_file();
+    let pages = web::router(ctx.clone());
     Router::new()
         .route("/api/v1/auth/register/start", post(auth::register_start))
         .route("/api/v1/auth/register/finish", post(auth::register_finish))
@@ -49,4 +51,5 @@ pub fn build(ctx: Ctx) -> Router {
         .route("/api/v1/files/{id}/content", get(file::content))
         .layer(DefaultBodyLimit::max(limit as usize))
         .with_state(ctx)
+        .merge(pages)
 }

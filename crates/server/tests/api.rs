@@ -8,6 +8,8 @@ use reqwest::{Client, Method, StatusCode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use axum::http::header::SET_COOKIE;
+use sylver::ctx::Limits;
 use sylvie_core::codec;
 use sylvie_core::message::{
     BlobReply, Device, FileItem, Grant, LoginFinish, LoginReply, LoginStart, Me, RegisterFinish,
@@ -15,7 +17,6 @@ use sylvie_core::message::{
 };
 use sylvie_core::opaque::{self, Suite};
 use sylvie_core::vault;
-use sylver::ctx::Limits;
 
 const SMALL_LIMIT: u64 = 1024;
 use std::net::SocketAddr;
@@ -662,4 +663,107 @@ async fn rekey_rotates_kek_keeps_data_and_sessions() {
 
     let (status, _) = plain::<Me>(&hub, Method::GET, "/api/v1/me", Some(&authed.token)).await;
     assert_eq!(status, StatusCode::OK);
+}
+
+fn web_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn dashboard_gates_on_cookie() {
+    let hub = spawn().await;
+    let authed = register(&hub, "alee", "correct horse", "laptop").await;
+
+    let client = web_client();
+    let home = client.get(format!("{}/", hub.base)).send().await.unwrap();
+    assert_eq!(home.status(), StatusCode::SEE_OTHER);
+    assert_eq!(home.headers().get("location").unwrap(), "/login");
+
+    let page = client
+        .get(format!("{}/login", hub.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(page.status(), StatusCode::OK);
+    assert!(page.text().await.unwrap().contains("device token"));
+
+    let bad = client
+        .post(format!("{}/login", hub.base))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("token=wrong-token")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), StatusCode::SEE_OTHER);
+    assert_eq!(bad.headers().get("location").unwrap(), "/login");
+    assert!(!bad.headers().contains_key(SET_COOKIE));
+
+    let good = client
+        .post(format!("{}/login", hub.base))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("token={}", authed.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(good.status(), StatusCode::SEE_OTHER);
+    let cookie = good.headers().get(SET_COOKIE).unwrap().to_str().unwrap();
+    assert!(cookie.starts_with("sylvie_token="));
+
+    let page = client
+        .get(format!("{}/", hub.base))
+        .header("cookie", cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(page.status(), StatusCode::OK);
+    let body = page.text().await.unwrap();
+    assert!(body.contains("laptop"));
+    assert!(body.contains("no secrets yet"));
+}
+
+#[tokio::test]
+async fn dashboard_revoke_works() {
+    let hub = spawn().await;
+    let laptop = register(&hub, "alee", "correct horse", "laptop").await;
+    let phone = login(&hub, "alee", "correct horse", None, Some("phone"))
+        .await
+        .unwrap();
+
+    let client = web_client();
+    let unlocked = client
+        .post(format!("{}/login", hub.base))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("token={}", phone.token))
+        .send()
+        .await
+        .unwrap();
+    let cookie = unlocked
+        .headers()
+        .get(SET_COOKIE)
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    let gone = client
+        .post(format!("{}/web/device/{}", hub.base, laptop.device))
+        .header("cookie", cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(gone.status(), StatusCode::SEE_OTHER);
+
+    let (status, _) = plain::<Me>(&hub, Method::GET, "/api/v1/me", Some(&laptop.token)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (_, devices): (_, Option<Vec<Device>>) =
+        plain(&hub, Method::GET, "/api/v1/devices", Some(&phone.token)).await;
+    let row = devices
+        .unwrap()
+        .into_iter()
+        .find(|d| d.id == laptop.device)
+        .unwrap();
+    assert!(row.revoked.is_some());
 }

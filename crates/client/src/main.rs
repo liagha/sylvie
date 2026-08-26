@@ -39,6 +39,7 @@ enum Command {
     },
     Logout,
     Status,
+    Token,
     Passwd {
         #[arg(long, hide = true)]
         new: Option<String>,
@@ -94,6 +95,7 @@ async fn run(cli: Cli) -> Result<(), sylvie_core::error::Error> {
         }
         Command::Logout => commands::auth::logout(&http, cli.json).await,
         Command::Status => commands::auth::status(&http, cli.json).await,
+        Command::Token => commands::auth::token(cli.json),
         Command::Passwd { new } => commands::auth::passwd(&http, new, cli.json).await,
         Command::Secret { cmd } => commands::secret::run(&http, cmd, cli.json).await,
         Command::File { cmd } => commands::file::run(&http, cmd, cli.json).await,

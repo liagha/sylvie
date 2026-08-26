@@ -107,6 +107,16 @@ pub async fn passwd(http: &Client, fresh: Option<String>, json: bool) -> Result<
     Ok(())
 }
 
+pub fn token(json: bool) -> Result<(), Error> {
+    let config = stored()?;
+    if json {
+        println!(r#"{{"token": "{}"}}"#, config.token);
+    } else {
+        println!("{}", config.token);
+    }
+    Ok(())
+}
+
 pub async fn logout(http: &Client, json: bool) -> Result<(), Error> {
     let config = stored()?;
     net::remove(

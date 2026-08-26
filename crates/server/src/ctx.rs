@@ -46,6 +46,7 @@ struct Inner {
     storage: PathBuf,
     max_file: u64,
     limits: Limits,
+    web: pardeh::App,
     pendings: Mutex<HashMap<String, Pending>>,
     floods: Mutex<HashMap<String, Strike>>,
 }
@@ -59,12 +60,15 @@ impl Ctx {
             Ok(setup) => setup,
             Err(error) => panic!("server setup: {error}"),
         };
+        let web = pardeh::App::new();
+        crate::routes::web::seed(&web);
         Self(Arc::new(Inner {
             db,
             setup,
             storage,
             max_file,
             limits,
+            web,
             pendings: Mutex::new(HashMap::new()),
             floods: Mutex::new(HashMap::new()),
         }))
@@ -80,6 +84,10 @@ impl Ctx {
 
     pub fn max_file(&self) -> u64 {
         self.0.max_file
+    }
+
+    pub fn web(&self) -> &pardeh::App {
+        &self.0.web
     }
 
     pub fn limits(&self) -> Limits {

@@ -25,6 +25,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 dirs.workspace = true
+pardeh = { git = "https://github.com/liagha/pardeh" }
 
 [dev-dependencies]
 reqwest.workspace = true
