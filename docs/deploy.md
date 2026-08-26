@@ -77,14 +77,42 @@ Copy the block in [`deploy/Caddyfile`](deploy/Caddyfile): one subdomain, one
 Caddy issues certificates per subdomain automatically — just add the DNS
 record first.
 
-## Backups
+## Backups and disaster recovery
 
 Everything stateful is two paths:
 
-```bash
-sqlite3 /var/lib/sylvie/sylvie.db ".backup /tmp/sylvie.db.bak"
-tar czf sylvie-backup.tgz /var/lib/sylvie/sylvie.db.bak /var/lib/sylvie/files
+```text
+/var/lib/sylvie/sylvie.db   users, devices, sessions, secret ciphertext
+/var/lib/sylvie/files/      file blobs
 ```
 
-Take both together; the DB alone cannot restore file contents and vice
-versa. Restore = stop service, replace both, start service.
+The bootstrap installs a daily job (`/etc/cron.d/sylvie-backup`, 04:00)
+snapshotting both into `/var/backups/sylvie/`, keeping 14 days. That protects
+against a bad deploy — not against losing the box.
+
+**Off-box copies are your responsibility.** Two supported ways:
+
+1. From any machine: `deploy/pull-backup.sh root@hub.example.com` grabs a fresh
+   snapshot into a dated local folder. Cron it from a machine that is
+   reliably on.
+2. Push to object storage (S3-compatible; Arvan works well for `.ir`) with
+   rclone, wrapping the archive in `age` or `rclone crypt` first — the
+   tarball contains plaintext files.
+
+### Restoring onto a fresh box
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liagha/sylvie/main/deploy/bootstrap.sh | bash
+systemctl stop sylver
+cp db.snapshot /var/lib/sylvie/sylvie.db
+tar xzf files.tgz -C /var/lib/sylvie
+chown -R sylvie:sylvie /var/lib/sylvie
+systemctl start sylver
+```
+
+Point DNS at the new box; Caddy re-issues certificates automatically.
+Devices keep working — tokens live in the database you restored.
+
+One asymmetry to respect: secret values decrypt only with your password
+(derived vault key). A stolen backup is inert without it; a forgotten
+password makes every backup of secrets unreadable. Files need no password.
