@@ -142,22 +142,6 @@ pub async fn remove(
     deliver(request.send().await.map_err(transport)?).await
 }
 
-pub async fn bytes(
-    client: &Client,
-    base: &str,
-    path: &str,
-    token: Option<&str>,
-) -> Result<Vec<u8>, Error> {
-    let request = target(client, Method::GET, base, path, token);
-    let response = request.send().await.map_err(transport)?;
-    let status = response.status();
-    if !status.is_success() {
-        let text = response.text().await.unwrap_or_default();
-        return Err(remote(status, &text));
-    }
-    Ok(response.bytes().await.map_err(transport)?.to_vec())
-}
-
 pub fn query_value(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for byte in text.bytes() {
@@ -169,4 +153,21 @@ pub fn query_value(text: &str) -> String {
         }
     }
     out
+}
+
+pub fn transport_err(error: reqwest::Error) -> Error {
+    transport(error)
+}
+
+pub fn remote_err(status: StatusCode, text: &str) -> Error {
+    remote(status, text)
+}
+
+pub fn build_get(
+    client: &Client,
+    base: &str,
+    path: &str,
+    token: Option<&str>,
+) -> Result<reqwest::RequestBuilder, Error> {
+    Ok(target(client, Method::GET, base, path, token))
 }
