@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::response::Response;
 use futures_util::StreamExt;
+use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
@@ -34,22 +35,30 @@ pub async fn upload(
     let name = query.get("name").ok_or(Error::Request)?;
     sane(name, NAME_LIMIT).ok_or(Error::Request)?;
     let limit = ctx.max_file();
+    let id = Uuid::new_v4().to_string();
+    let dest = ctx.object_path(&id);
+    let mut file = tokio::fs::File::create(&dest).await.map_err(internal)?;
     let mut stream = body.into_data_stream();
-    let mut buf = Vec::new();
-    let max = limit as usize;
+    let mut written: u64 = 0;
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| Error::Internal(e.to_string()))?;
-        if buf.len() + chunk.len() > max {
+        if written + chunk.len() as u64 > limit {
+            let _ = tokio::fs::remove_file(&dest).await;
             return Err(Error::Large.into());
         }
-        buf.extend_from_slice(&chunk);
+        file.write_all(&chunk).await.map_err(internal)?;
+        written += chunk.len() as u64;
     }
-    let id = Uuid::new_v4().to_string();
-    tokio::fs::write(ctx.object_path(&id), &buf)
-        .await
-        .map_err(internal)?;
+    drop(file);
+    let obj = ctx.object_path(&id);
+    let digest = tokio::task::spawn_blocking(move || {
+        let data = std::fs::read(&obj).map_err(|e| Error::Internal(e.to_string()))?;
+        Ok::<_, Error>(sylvie_core::codec::digest(&data))
+    })
+    .await
+    .map_err(internal)?
+    .map_err(internal)?;
     let now = stamp();
-    let digest = sylvie_core::codec::digest(&buf);
     sqlx::query(
         "insert into files(id, owner, name, size, hash, path, created, updated) \
          values (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -57,7 +66,7 @@ pub async fn upload(
     .bind(&id)
     .bind(&account.owner)
     .bind(name)
-    .bind(buf.len() as i64)
+    .bind(written as i64)
     .bind(&digest)
     .bind(&id)
     .bind(&now)
@@ -65,13 +74,13 @@ pub async fn upload(
     .execute(ctx.db())
     .await
     .map_err(internal)?;
-    tracing::info!(owner = %account.owner, file = %id, size = buf.len(), "file stored");
+    tracing::info!(owner = %account.owner, file = %id, size = written, "file stored");
     Ok((
         StatusCode::CREATED,
         Json(FileItem {
             id,
             name: name.clone(),
-            size: buf.len() as u64,
+            size: written,
             hash: digest,
             created: now.clone(),
             updated: now,

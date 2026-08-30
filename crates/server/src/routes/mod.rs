@@ -6,7 +6,6 @@ pub mod secret;
 pub mod web;
 
 use axum::Router;
-use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
 
 use sylvie_core::error::Error;
@@ -28,7 +27,6 @@ pub(crate) fn ident(raw: &str) -> Result<String, Error> {
 }
 
 pub fn build(ctx: Ctx) -> Router {
-    let limit = ctx.max_file();
     let pages = web::router(ctx.clone());
     Router::new()
         .route("/api/v1/auth/register/start", post(auth::register_start))
@@ -49,7 +47,6 @@ pub fn build(ctx: Ctx) -> Router {
         .route("/api/v1/files", post(file::upload).get(file::list))
         .route("/api/v1/files/{id}", get(file::meta).delete(file::remove))
         .route("/api/v1/files/{id}/content", get(file::content))
-        .layer(DefaultBodyLimit::max(limit as usize))
         .with_state(ctx)
         .merge(pages)
 }
