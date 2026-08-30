@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::Subcommand;
 use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
 use reqwest::Client;
+use tokio::io::AsyncReadExt;
 
 use sylvie_core::codec;
 use sylvie_core::error::Error;
@@ -31,7 +32,7 @@ fn bar(total: u64, label: &str) -> ProgressBar {
     let pb = ProgressBar::new(total);
     pb.set_style(
         ProgressStyle::with_template(&format!(
-            " {label} [{{bar:30}}] {{bytes}}/{{total_bytes}} ({{eta}})"
+            " {label} [{{bar:30}}] {{bytes}}/{{total_bytes}} ({{elapsed}})"
         ))
         .unwrap()
         .progress_chars("=>-"),
@@ -59,10 +60,23 @@ async fn upload(http: &Client, path: &std::path::Path, json: bool) -> Result<(),
         .map_err(|e| Error::Internal(e.to_string()))?
         .len();
     let pb = bar(total, "uploading");
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|e| Error::Internal(e.to_string()))?;
     let mut body = Vec::with_capacity(total as usize);
-    let mut file = std::fs::File::open(path).map_err(|e| Error::Internal(e.to_string()))?;
-    std::io::Read::read_to_end(&mut file, &mut body).map_err(|e| Error::Internal(e.to_string()))?;
-    pb.finish_and_clear();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .await
+            .map_err(|e| Error::Internal(e.to_string()))?;
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&buf[..n]);
+        pb.inc(n as u64);
+    }
+    pb.finish_with_message("done");
     let item: FileItem = net::post_raw(
         http,
         &url,
@@ -105,7 +119,7 @@ async fn download(http: &Client, id: &str, out: Option<PathBuf>, json: bool) -> 
         data.extend_from_slice(&chunk);
         pb.inc(chunk.len() as u64);
     }
-    pb.finish_and_clear();
+    pb.finish_with_message("done");
     let digest = codec::digest(&data);
     if digest != item.hash {
         return Err(Error::Crypto);
