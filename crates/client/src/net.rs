@@ -78,7 +78,29 @@ async fn deliver<R: DeserializeOwned>(response: Response) -> Result<R, Error> {
 fn remote(status: StatusCode, text: &str) -> Error {
     match serde_json::from_str::<Fault>(text) {
         Ok(fault) => Error::from_code(&fault.error),
-        Err(_) => Error::Internal(format!("http {}", status.as_u16())),
+        Err(_) => Error::Internal(http_status(status, text)),
+    }
+}
+
+fn http_status(status: StatusCode, _text: &str) -> String {
+    let phrase = status.canonical_reason().unwrap_or("error");
+    let code = status.as_u16();
+    let hint = match code {
+        400 => "the server rejected the request",
+        401 => "not logged in (run sylvie login)",
+        403 => "access denied",
+        404 => "not found",
+        413 => "file is too large",
+        429 => "too many requests — try again later",
+        500 => "internal server error",
+        502 => "server is unreachable (bad gateway)",
+        503 => "server is unavailable",
+        _ => "",
+    };
+    if hint.is_empty() {
+        format!("{phrase} (http {code})")
+    } else {
+        format!("{phrase}: {hint} (http {code})")
     }
 }
 

@@ -2483,6 +2483,7 @@ dependencies = [
  "axum",
  "base64",
  "dirs",
+ "futures-util",
  "opaque-ke",
  "pardeh",
  "rand 0.8.8",

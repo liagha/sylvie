@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use axum::Json;
-use axum::body::{Body, Bytes};
+use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::http::header::{CONTENT_DISPOSITION, CONTENT_TYPE};
 use axum::response::Response;
+use futures_util::StreamExt;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
@@ -28,19 +29,27 @@ pub async fn upload(
     State(ctx): State<Ctx>,
     account: Account,
     Query(query): Query<HashMap<String, String>>,
-    body: Bytes,
+    body: Body,
 ) -> Result<(StatusCode, Json<FileItem>), Failure> {
     let name = query.get("name").ok_or(Error::Request)?;
     sane(name, NAME_LIMIT).ok_or(Error::Request)?;
-    if body.len() as u64 > ctx.max_file() {
-        return Err(Error::Large.into());
+    let limit = ctx.max_file();
+    let mut stream = body.into_data_stream();
+    let mut buf = Vec::new();
+    let max = limit as usize;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| Error::Internal(e.to_string()))?;
+        if buf.len() + chunk.len() > max {
+            return Err(Error::Large.into());
+        }
+        buf.extend_from_slice(&chunk);
     }
     let id = Uuid::new_v4().to_string();
-    tokio::fs::write(ctx.object_path(&id), &body)
+    tokio::fs::write(ctx.object_path(&id), &buf)
         .await
         .map_err(internal)?;
     let now = stamp();
-    let digest = sylvie_core::codec::digest(&body);
+    let digest = sylvie_core::codec::digest(&buf);
     sqlx::query(
         "insert into files(id, owner, name, size, hash, path, created, updated) \
          values (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -48,7 +57,7 @@ pub async fn upload(
     .bind(&id)
     .bind(&account.owner)
     .bind(name)
-    .bind(body.len() as i64)
+    .bind(buf.len() as i64)
     .bind(&digest)
     .bind(&id)
     .bind(&now)
@@ -56,13 +65,13 @@ pub async fn upload(
     .execute(ctx.db())
     .await
     .map_err(internal)?;
-    tracing::info!(owner = %account.owner, file = %id, size = body.len(), "file stored");
+    tracing::info!(owner = %account.owner, file = %id, size = buf.len(), "file stored");
     Ok((
         StatusCode::CREATED,
         Json(FileItem {
             id,
             name: name.clone(),
-            size: body.len() as u64,
+            size: buf.len() as u64,
             hash: digest,
             created: now.clone(),
             updated: now,
