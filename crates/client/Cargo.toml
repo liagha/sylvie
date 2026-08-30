@@ -4,6 +4,10 @@ version.workspace = true
 license.workspace = true
 edition.workspace = true
 
+[lib]
+name = "sylvie"
+path = "src/lib.rs"
+
 [[bin]]
 name = "sylvie"
 path = "src/main.rs"
@@ -19,3 +23,7 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 toml.workspace = true
+
+[dev-dependencies]
+sylver = { path = "../server" }
+uuid.workspace = true

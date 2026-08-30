@@ -6,7 +6,7 @@ import init, {
     start_registration, finish_registration,
     start_login, finish_login, open_login,
     derive_vault, seal_secret, open_secret,
-    rekey_unwrap, rekey_start, rekey_finish, drop_session,
+    rekey_start, rekey_finish, drop_session,
 } from "/assets/sylvie_web.js";
 
 const TOKEN = "sylvie_token";

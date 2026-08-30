@@ -53,3 +53,12 @@ pub fn build(ctx: Ctx) -> Router {
         .with_state(ctx)
         .merge(pages)
 }
+
+pub async fn serve(listener: tokio::net::TcpListener, ctx: Ctx) -> std::io::Result<()> {
+    let app = build(ctx);
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
+}

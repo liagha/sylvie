@@ -2452,9 +2452,11 @@ dependencies = [
  "rpassword",
  "serde",
  "serde_json",
+ "sylver",
  "sylvie-core",
  "tokio",
  "toml",
+ "uuid",
 ]
 
 [[package]]

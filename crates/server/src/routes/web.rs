@@ -524,7 +524,9 @@ async fn known_token(db: &sqlx::SqlitePool, token: &str) -> Option<(String, Stri
 }
 
 fn cookie(token: &str) -> HeaderValue {
-    header_value(format!("{COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/"))
+    header_value(format!(
+        "{COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/; Secure"
+    ))
 }
 
 fn clear_cookie() -> HeaderValue {

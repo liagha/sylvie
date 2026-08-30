@@ -138,7 +138,7 @@ fn rekey_preserves_secrets() {
     let reply = hub.login_start("alee", &field(&start, "request"), "pending-r2");
     let finished = sylvie_web::finish_login(handle, &reply, Some("web".into()), None).unwrap();
     let _ = hub.login_finish("alee", "pending-r2", &field(&finished, "message"));
-    sylvie_web::rekey_unwrap(handle, &wrap).unwrap();
+    sylvie_web::derive_vault(handle, &wrap).unwrap();
     let started = sylvie_web::rekey_start(handle, "second password ok").unwrap();
     let response = hub.rekey_start("alee", &field(&started, "request"));
     let finished = sylvie_web::rekey_finish(handle, &response, "second password ok").unwrap();

@@ -29,8 +29,8 @@ pub use {
     finish_login_impl as finish_login, finish_registration_impl as finish_registration,
     open_login_impl as open_login, open_secret_impl as open_secret,
     rekey_finish_impl as rekey_finish, rekey_start_impl as rekey_start,
-    rekey_unwrap_impl as rekey_unwrap, seal_secret_impl as seal_secret,
-    start_login_impl as start_login, start_registration_impl as start_registration,
+    seal_secret_impl as seal_secret, start_login_impl as start_login,
+    start_registration_impl as start_registration,
 };
 
 struct Session {
@@ -234,14 +234,6 @@ pub fn open_secret_impl(handle: u64, boxed: &str) -> Fail<String> {
     String::from_utf8(plain).map_err(|_| bad("binary secret"))
 }
 
-pub fn rekey_unwrap_impl(handle: u64, wrapped: &str) -> Fail<()> {
-    let kek = vault_kek(handle)?;
-    let secret = vault::open(&kek, &codec::decode(wrapped).map_err(|_| bad("bad wrap"))?)
-        .map_err(|_| bad("wrong password"))?;
-    edit(handle, |session| session.secret = secret)?;
-    Ok(())
-}
-
 pub fn rekey_start_impl(handle: u64, new_password: &str) -> Fail<String> {
     let started = ClientRegistration::<Suite>::start(&mut OsRng, new_password.as_bytes())
         .map_err(|_| bad("rekey start failed"))?;
@@ -340,11 +332,6 @@ mod exports {
     #[wasm_bindgen]
     pub fn open_secret(handle: u64, boxed: &str) -> Result<String, JsValue> {
         open_secret_impl(handle, boxed).map_err(|error| JsValue::from_str(&error))
-    }
-
-    #[wasm_bindgen]
-    pub fn rekey_unwrap(handle: u64, wrapped: &str) -> Result<(), JsValue> {
-        rekey_unwrap_impl(handle, wrapped).map_err(|error| JsValue::from_str(&error))
     }
 
     #[wasm_bindgen]
