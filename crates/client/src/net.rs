@@ -100,12 +100,12 @@ pub async fn post<B: Serialize, R: DeserializeOwned>(
     deliver(request.json(body).send().await.map_err(transport)?).await
 }
 
-pub async fn post_raw<R: DeserializeOwned>(
+pub async fn post_body<R: DeserializeOwned>(
     client: &Client,
     base: &str,
     path: &str,
     token: Option<&str>,
-    body: Vec<u8>,
+    body: reqwest::Body,
 ) -> Result<R, Error> {
     let request = target(client, Method::POST, base, path, token);
     deliver(request.body(body).send().await.map_err(transport)?).await

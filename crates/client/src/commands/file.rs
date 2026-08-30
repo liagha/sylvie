@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Subcommand;
+use futures_util::StreamExt;
 use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
 use reqwest::Client;
-use tokio::io::AsyncReadExt;
+use tokio_util::io::ReaderStream;
 
 use sylvie_core::codec;
 use sylvie_core::error::Error;
@@ -60,24 +61,17 @@ async fn upload(http: &Client, path: &std::path::Path, json: bool) -> Result<(),
         .map_err(|e| Error::Internal(e.to_string()))?
         .len();
     let pb = bar(total, "uploading");
-    let mut file = tokio::fs::File::open(path)
+    let file = tokio::fs::File::open(path)
         .await
         .map_err(|e| Error::Internal(e.to_string()))?;
-    let mut body = Vec::with_capacity(total as usize);
-    let mut buf = vec![0u8; 64 * 1024];
-    loop {
-        let n = file
-            .read(&mut buf)
-            .await
-            .map_err(|e| Error::Internal(e.to_string()))?;
-        if n == 0 {
-            break;
-        }
-        body.extend_from_slice(&buf[..n]);
-        pb.inc(n as u64);
-    }
-    pb.finish_with_message("done");
-    let item: FileItem = net::post_raw(
+    let pb2 = pb.clone();
+    let stream = ReaderStream::with_capacity(file, 64 * 1024).map(move |result| {
+        result.inspect(|chunk| {
+            pb2.inc(chunk.len() as u64);
+        })
+    });
+    let body = reqwest::Body::wrap_stream(stream);
+    let item: FileItem = net::post_body(
         http,
         &url,
         &format!("{BASE}?name={}", net::query_value(&name)),
@@ -85,6 +79,7 @@ async fn upload(http: &Client, path: &std::path::Path, json: bool) -> Result<(),
         body,
     )
     .await?;
+    pb.finish_with_message("done");
     if json {
         println!(
             "{}",
@@ -106,7 +101,7 @@ async fn download(http: &Client, id: &str, out: Option<PathBuf>, json: bool) -> 
     let item: FileItem = net::get(http, &url, &format!("{BASE}/{id}"), Some(&token)).await?;
     let target: PathBuf = out.unwrap_or_else(|| PathBuf::from(&item.name));
     let request = net::build_get(http, &url, &format!("{BASE}/{id}/content"), Some(&token))?;
-    let mut response = request.send().await.map_err(net::transport_err)?;
+    let response = request.send().await.map_err(net::transport_err)?;
     let status = response.status();
     if !status.is_success() {
         let text = response.text().await.unwrap_or_default();
@@ -114,8 +109,10 @@ async fn download(http: &Client, id: &str, out: Option<PathBuf>, json: bool) -> 
     }
     let total = response.content_length().unwrap_or(item.size);
     let pb = bar(total, "downloading");
+    let mut stream = response.bytes_stream();
     let mut data = Vec::with_capacity(total as usize);
-    while let Some(chunk) = response.chunk().await.map_err(net::transport_err)? {
+    while let Some(result) = stream.next().await {
+        let chunk = result.map_err(|e| Error::Internal(e.to_string()))?;
         data.extend_from_slice(&chunk);
         pb.inc(chunk.len() as u64);
     }
