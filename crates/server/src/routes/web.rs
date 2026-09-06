@@ -181,6 +181,7 @@ fn secret_tools() -> Node {
                         .attr("name", "value")
                         .attr("placeholder", "value (prompted for password)"),
                 )
+                .kid(button().attr("type", "submit").text("set"))
                 .kid(div().class("err").attr("id", "secret-msg").text("")),
         )
 }
