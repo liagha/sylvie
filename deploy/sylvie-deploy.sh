@@ -8,6 +8,8 @@ WEB=/var/lib/sylvie/web
 rm -rf "$STAGE"
 install -d -o sylvie -g sylvie -m 700 "$STAGE"
 tar xzf - -C "$STAGE"
+chmod 755 "$STAGE/sylver" "$STAGE/sylvie"
+chmod 644 "$STAGE"/web/*
 
 SYLVIE_BIND_ADDR=127.0.0.1:17400 \
 SYLVIE_DB_PATH="$STAGE/boot.db" \
