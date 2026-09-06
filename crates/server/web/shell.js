@@ -1,6 +1,7 @@
 // dashboard scripting: drives the sylvie-web wasm to register, unlock, and
 // manage vault items from the browser, turning server and crypto errors into
-// readable messages.
+// readable messages. unlocks once per page via a native dialog and keeps the
+// vault open until the lock chip is clicked.
 
 import init, {
     start_registration, finish_registration,
@@ -10,6 +11,7 @@ import init, {
 } from "/assets/sylvie_web.js";
 
 const TOKEN = "sylvie_token";
+let vkey = null;
 
 function el(id) { return document.getElementById(id); }
 
@@ -120,19 +122,107 @@ async function enroll(user, password, name) {
     location.href = "/";
 }
 
+function run(btn, work) {
+    if (!btn) return Promise.resolve(work());
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "…";
+    return Promise.resolve(work()).finally(() => {
+        btn.disabled = false;
+        btn.textContent = label;
+    });
+}
+
+function fallback(text) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch {}
+    area.remove();
+    return ok;
+}
+
+async function grab(btn, text) {
+    const ok = navigator.clipboard && window.isSecureContext
+        ? await navigator.clipboard.writeText(text).then(() => true).catch(() => fallback(text))
+        : fallback(text);
+    const label = btn.textContent;
+    btn.textContent = ok ? "copied" : "failed";
+    setTimeout(() => { btn.textContent = label; }, ok ? 1200 : 2000);
+}
+
+function lock() {
+    if (vkey !== null) {
+        drop_session(vkey);
+        vkey = null;
+    }
+    showLock();
+}
+
+function showLock() {
+    const chip = el("lock-state");
+    if (!chip) return;
+    chip.textContent = vkey === null ? "locked" : "unlocked";
+    chip.className = vkey === null ? "chip" : "chip on";
+}
+
+async function lockAsk() {
+    const dialog = el("unlock-dialog");
+    const form = el("unlock-form");
+    const pass = el("unlock-password");
+    const go = el("unlock-go");
+    const msg = el("unlock-msg");
+    msg.textContent = "";
+    dialog.showModal();
+    pass.focus();
+    const ok = await new Promise((resolve) => {
+        let done = false;
+        const finish = (value) => { if (!done) { done = true; resolve(value); } };
+        form.onsubmit = async (event) => {
+            event.preventDefault();
+            go.disabled = true;
+            go.textContent = "…";
+            msg.textContent = "";
+            try {
+                vkey = await unlock(pass.value);
+                finish(true);
+            } catch (error) {
+                fail(msg, error);
+                go.disabled = false;
+                go.textContent = "unlock";
+                pass.select();
+            }
+        };
+        el("unlock-cancel").onclick = () => finish(false);
+        dialog.oncancel = () => finish(false);
+    });
+    dialog.close();
+    pass.value = "";
+    showLock();
+    return ok;
+}
+
+async function want(work) {
+    if (vkey === null && !(await lockAsk())) return false;
+    await work(vkey);
+    return true;
+}
+
 async function secretGet(name) {
     const msg = el("secret-msg");
+    const view = el("secret-view");
+    const code = el("secret-code");
     try {
-        const password = prompt("password to unlock");
-        if (!password) return;
-        const handle = await unlock(password);
         const boxed = (await getJson(`/api/v1/secrets/${encodeURIComponent(name)}`)).data;
-        const plain = open_secret(handle, boxed);
-        drop_session(handle);
-        msg.style.color = "#9fb2c8";
-        msg.textContent = plain;
+        const plain = open_secret(vkey, boxed);
+        code.textContent = plain;
+        view.classList.add("on");
+        msg.textContent = "";
     } catch (error) {
-        msg.style.color = "#e8798c";
         fail(msg, error);
     }
 }
@@ -140,15 +230,10 @@ async function secretGet(name) {
 async function secretSet(name, value) {
     const msg = el("secret-msg");
     try {
-        const password = prompt("password to unlock");
-        if (!password) return;
-        const handle = await unlock(password);
-        const boxed = seal_secret(handle, value);
+        const boxed = seal_secret(vkey, value);
         await putJson(`/api/v1/secrets/${encodeURIComponent(name)}`, { data: boxed });
-        drop_session(handle);
         location.reload();
     } catch (error) {
-        msg.style.color = "#e8798c";
         fail(msg, error);
     }
 }
@@ -169,19 +254,17 @@ async function fileUpload(file) {
     }
 }
 
-async function passwd(oldPassword, newPassword) {
+async function passwd(next) {
     const msg = el("passwd-msg");
     try {
-        if (newPassword.length < 8) throw new Error("password too short (min 8)");
-        const handle = await unlock(oldPassword);
-        const start = JSON.parse(rekey_start(handle, newPassword));
+        if (next.length < 8) throw new Error("password too short (min 8)");
+        const start = JSON.parse(rekey_start(vkey, next));
         const reply = await postJson("/api/v1/auth/rekey/start", { message: start.request });
-        const fin = JSON.parse(rekey_finish(handle, reply.message, newPassword));
+        const fin = JSON.parse(rekey_finish(vkey, reply.message, next));
         await postJson("/api/v1/auth/rekey/finish", {
             message: fin.message,
             wrap: fin.wrap,
         });
-        drop_session(handle);
         location.reload();
     } catch (error) {
         fail(msg, error);
@@ -201,83 +284,122 @@ async function showStatus() {
 }
 
 function wire() {
+    document.addEventListener("submit", (event) => {
+        const form = event.target;
+        const action = form.getAttribute("action") || "";
+        if (!action.includes("/web/")) return;
+        const row = form.closest("tr");
+        const cell = row && row.querySelector("td");
+        const label = cell ? cell.textContent.trim() : "";
+        const verb = action.includes("/web/file") || action.includes("/web/secret")
+            ? "delete"
+            : "revoke";
+        const noun = action.includes("/web/file")
+            ? "file"
+            : action.includes("/web/secret")
+                ? "secret"
+                : "device";
+        if (!confirm(label ? `${verb} ${noun} ${label}?` : `${verb} this ${noun}?`)) {
+            event.preventDefault();
+        }
+    }, true);
+
     const reg = el("form-register");
     if (reg) {
-        reg.addEventListener("submit", async (event) => {
+        reg.addEventListener("submit", (event) => {
             event.preventDefault();
+            const data = new FormData(reg);
             const msg = el("register-msg");
             msg.textContent = "";
-            try {
-                const data = new FormData(reg);
-                await register(
-                    data.get("user"),
-                    data.get("password"),
-                    data.get("name") || "web",
-                );
-            } catch (error) {
-                fail(msg, error);
-            }
+            run(reg.querySelector("button"), async () => {
+                try {
+                    await register(data.get("user"), data.get("password"), data.get("name") || "web");
+                } catch (error) {
+                    fail(msg, error);
+                }
+            });
         });
     }
 
     const login = el("form-login");
     if (login) {
-        login.addEventListener("submit", async (event) => {
+        login.addEventListener("submit", (event) => {
             event.preventDefault();
+            const data = new FormData(login);
             const msg = el("login-msg");
             msg.textContent = "";
-            try {
-                const data = new FormData(login);
-                await enroll(
-                    data.get("user"),
-                    data.get("password"),
-                    data.get("name") || "web",
-                );
-            } catch (error) {
-                fail(msg, error);
-            }
+            run(login.querySelector("button"), async () => {
+                try {
+                    await enroll(data.get("user"), data.get("password"), data.get("name") || "web");
+                } catch (error) {
+                    fail(msg, error);
+                }
+            });
         });
     }
 
     const sget = el("secret-get");
     if (sget) {
-        sget.addEventListener("submit", async (event) => {
+        sget.addEventListener("submit", (event) => {
             event.preventDefault();
             const name = new FormData(sget).get("name");
-            if (name) await secretGet(name);
+            if (!name) return;
+            run(sget.querySelector("button"), () => want(() => secretGet(name)));
         });
     }
 
     const sset = el("secret-set");
     if (sset) {
-        sset.addEventListener("submit", async (event) => {
+        sset.addEventListener("submit", (event) => {
             event.preventDefault();
             const data = new FormData(sset);
             const name = data.get("name");
             const value = data.get("value");
-            if (name && value !== "") await secretSet(name, value);
+            if (!name || value === "") return;
+            run(sset.querySelector("button"), () => want(() => secretSet(name, value)));
         });
     }
 
     const upload = el("file-upload");
     if (upload) {
-        upload.addEventListener("submit", async (event) => {
+        upload.addEventListener("submit", (event) => {
             event.preventDefault();
             const file = upload.querySelector("input[type=file]").files[0];
-            if (file) await fileUpload(file);
+            if (!file) return;
+            run(upload.querySelector("button"), () => fileUpload(file));
         });
     }
 
     const change = el("passwd");
     if (change) {
-        change.addEventListener("submit", async (event) => {
+        change.addEventListener("submit", (event) => {
             event.preventDefault();
-            const data = new FormData(change);
-            await passwd(data.get("old"), data.get("new"));
+            const next = new FormData(change).get("new");
+            run(change.querySelector("button"), () => want(() => passwd(next)));
         });
     }
 
+    const copy = el("secret-copy");
+    if (copy) {
+        copy.addEventListener("click", () => grab(copy, el("secret-code").textContent));
+    }
+
+    const hide = el("secret-hide");
+    if (hide) {
+        hide.addEventListener("click", () => {
+            const view = el("secret-view");
+            view.classList.remove("on");
+            el("secret-code").textContent = "";
+        });
+    }
+
+    const chip = el("lock-state");
+    if (chip) {
+        chip.addEventListener("click", () => { if (vkey !== null) lock(); else lockAsk(); });
+    }
+
     showStatus();
+    showLock();
 }
 
 await init();
