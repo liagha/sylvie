@@ -1,0 +1,60 @@
+name: sylvie
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: jetli/wasm-bindgen-action@v0.2.0
+        with:
+          version: "0.2.100"
+      - uses: swatinem/rust-cache@v2
+      - run: cargo build --release --workspace --locked
+      - run: cargo test --release --locked
+      - run: sh build-web.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            target/release/sylver
+            target/release/sylvie
+            web/
+          retention-days: 7
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip deploy]')
+    runs-on: ubuntu-latest
+    env:
+      HOST: 185.8.175.69
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+          merge-multiple: true
+      - name: deploy
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printenv VPS_SSH_KEY > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printenv VPS_KNOWN_HOSTS > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          tar czf - -C dist . | ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=yes root@$HOST sylvie-deploy
