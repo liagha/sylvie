@@ -111,13 +111,13 @@ textarea { resize: vertical; min-height: 3.2rem }
 .field { display: grid; gap: .35rem; padding: 0 1rem 1rem }
 .field span { font-size: .8rem; color: #8b96a5 }
 .hint { display: block; color: #7d8894; font-size: .8rem; padding: 0 1rem 1rem }
-.err { color: #e8798c; font-size: .82rem; min-height: 1rem }
+.err { color: #f2a5b5; font-size: .82rem; min-height: 1.2rem; padding-left: .55rem; border-left: 2px solid rgba(232, 121, 140, .4); line-height: 1.4 }
 .login { max-width: 21rem; margin: 8vh auto 0; padding: 0 1rem }
 .brand { padding: 1.6rem 1.4rem .2rem; text-align: center }
 .brand h1 { font-size: 1.5rem; letter-spacing: .14em }
 .brand p { margin: .35rem 0 0; color: #7d8894; font-size: .82rem }
 .tabs { display: grid }
-.tabs input { position: absolute; opacity: 0; pointer-events: none }
+.tabs > input { position: absolute; opacity: 0; pointer-events: none }
 .tab-head { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid #1d242c; margin-top: 1rem }
 .tab-head label { padding: .6rem 0; text-align: center; color: #7d8894; font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; cursor: pointer }
 .tab-head label:hover { color: #cfe0f5 }
@@ -286,7 +286,7 @@ fn passwd_form() -> Node {
     form()
         .attr("id", "passwd")
         .class("tools")
-        .kid(credential("new password (min 8)", "new", "password", "new-password", ""))
+        .kid(credential("new password (min 8)", "new", "password", "new-password", "", true, true))
         .kid(div().class("field").kid(button().attr("type", "submit").text("change password")))
         .kid(
             div()
@@ -314,7 +314,8 @@ fn unlock_dialog() -> Node {
                                 .attr("id", "unlock-password")
                                 .attr("name", "password")
                                 .attr("placeholder", "unlock this vault")
-                                .attr("autocomplete", "current-password"),
+                                .attr("autocomplete", "current-password")
+                                .attr("required", ""),
                         ),
                 )
                 .kid(
@@ -346,17 +347,22 @@ fn logout_form() -> Node {
         .kid(button().text("log out"))
 }
 
-fn credential(label: &str, name: &str, kind: &str, auto: &str, placeholder: &str) -> Node {
+fn credential(label: &str, name: &str, kind: &str, auto: &str, placeholder: &str, need: bool, min: bool) -> Node {
+    let mut field = input()
+        .attr("type", kind)
+        .attr("name", name)
+        .attr("placeholder", placeholder)
+        .attr("autocomplete", auto);
+    if need {
+        field = field.attr("required", "");
+    }
+    if min {
+        field = field.attr("minlength", "8");
+    }
     div()
         .class("field")
         .kid(span().text(label))
-        .kid(
-            input()
-                .attr("type", kind)
-                .attr("name", name)
-                .attr("placeholder", placeholder)
-                .attr("autocomplete", auto),
-        )
+        .kid(field)
 }
 
 fn radio(id: &str, on: bool) -> Node {
@@ -410,15 +416,17 @@ fn login_body(create: bool) -> Node {
 fn register_form() -> Node {
     form()
         .attr("id", "form-register")
-        .kid(credential("username", "user", "text", "username", "you"))
+        .kid(credential("username", "user", "text", "username", "you", true, false))
         .kid(credential(
             "password",
             "password",
             "password",
             "new-password",
             "min 8 characters",
+            true,
+            true,
         ))
-        .kid(credential("device name", "name", "text", "off", "this browser"))
+        .kid(credential("device name", "name", "text", "off", "this browser", false, false))
         .kid(div().class("field").kid(button().attr("type", "submit").text("create account")))
         .kid(
             div()
@@ -432,15 +440,17 @@ fn register_form() -> Node {
 fn login_form() -> Node {
     form()
         .attr("id", "form-login")
-        .kid(credential("username", "user", "text", "username", "you"))
+        .kid(credential("username", "user", "text", "username", "you", true, false))
         .kid(credential(
             "password",
             "password",
             "password",
             "current-password",
-            "",
+            "your password",
+            true,
+            false,
         ))
-        .kid(credential("device name", "name", "text", "off", "this browser"))
+        .kid(credential("device name", "name", "text", "off", "this browser", false, false))
         .kid(div().class("field").kid(button().attr("type", "submit").text("unlock")))
         .kid(
             div()
@@ -455,7 +465,7 @@ fn token_form() -> Node {
     form()
         .attr("method", "post")
         .attr("action", "/login")
-        .kid(credential("device token", "token", "password", "off", "sylvie token"))
+        .kid(credential("device token", "token", "password", "off", "sylvie token", true, false))
         .kid(span().class("hint").text("from a device already enrolled"))
         .kid(div().class("field").kid(button().attr("type", "submit").text("unlock")))
 }

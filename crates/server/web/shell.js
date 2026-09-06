@@ -70,7 +70,14 @@ function getJson(path) { return api("GET", path); }
 function postJson(path, body) { return api("POST", path, body, false); }
 function putJson(path, body) { return api("PUT", path, body, false); }
 
+function soften(error) {
+    const text = error && error.message ? error.message : String(error);
+    if (text === "authentication required") return "wrong password";
+    return text;
+}
+
 async function unlock(password) {
+    if (!password) throw new Error("enter your password");
     const me = await getJson("/api/v1/me");
     const start = JSON.parse(start_login(me.username, password));
     const reply = await postJson("/api/v1/auth/login/start", {
@@ -89,6 +96,7 @@ async function unlock(password) {
 }
 
 async function register(user, password, name) {
+    if (!user) throw new Error("choose a username");
     if (password.length < 8) throw new Error("password too short (min 8)");
     const start = JSON.parse(start_registration(user, password));
     const reply = await postJson("/api/v1/auth/register/start", {
@@ -105,6 +113,7 @@ async function register(user, password, name) {
 }
 
 async function enroll(user, password, name) {
+    if (!user || !password) throw new Error("enter your username and password");
     const start = JSON.parse(start_login(user, password));
     const reply = await postJson("/api/v1/auth/login/start", {
         username: user,
@@ -191,7 +200,7 @@ async function lockAsk() {
                 vkey = await unlock(pass.value);
                 finish(true);
             } catch (error) {
-                fail(msg, error);
+                fail(msg, soften(error));
                 go.disabled = false;
                 go.textContent = "unlock";
                 pass.select();
@@ -332,7 +341,7 @@ function wire() {
                 try {
                     await enroll(data.get("user"), data.get("password"), data.get("name") || "web");
                 } catch (error) {
-                    fail(msg, error);
+                    fail(msg, soften(error));
                 }
             });
         });
