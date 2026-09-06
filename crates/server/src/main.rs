@@ -5,6 +5,10 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() {
+    if version_only() {
+        println!("sylver {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     let cfg = sylver::config::Config::load();
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_new(&cfg.level).unwrap_or_else(|_| EnvFilter::new("info")))
@@ -47,4 +51,12 @@ async fn main() {
 
 async fn stop() {
     let _ = tokio::signal::ctrl_c().await;
+}
+
+fn version_only() -> bool {
+    let mut args = std::env::args().skip(1);
+    match (args.next(), args.next()) {
+        (Some(flag), None) if flag == "--version" || flag == "-V" => true,
+        _ => false,
+    }
 }
