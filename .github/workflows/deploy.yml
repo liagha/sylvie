@@ -26,13 +26,15 @@ jobs:
       - run: cargo build --release --workspace --locked
       - run: cargo test --release --locked
       - run: sh build-web.sh
+      - name: stage dist
+        run: |
+          mkdir -p dist/web
+          cp target/release/sylver target/release/sylvie dist/
+          cp web/* dist/web/
       - uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: |
-            target/release/sylver
-            target/release/sylvie
-            web/
+          path: dist/
           retention-days: 7
 
   deploy:
@@ -46,7 +48,6 @@ jobs:
         with:
           name: dist
           path: dist
-          merge-multiple: true
       - name: deploy
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
