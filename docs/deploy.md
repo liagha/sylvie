@@ -63,7 +63,7 @@ That account is now permanent; every other device uses `sylvie login`.
 SYLVIE_VERSION=vX.Y.Z bash -c 'set -e
   curl -fL -o /usr/local/bin/sylver \
     https://github.com/liagha/sylvie/releases/download/$SYLVIE_VERSION/sylver-x86_64-linux
-  curl -fL -o /usr/local/bin/sylv \
+  curl -fL -o /usr/local/bin/sylvie \
     https://github.com/liagha/sylvie/releases/download/$SYLVIE_VERSION/sylvie-x86_64-linux
   systemctl restart sylver'
 ```
