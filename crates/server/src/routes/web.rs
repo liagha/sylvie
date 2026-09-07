@@ -10,11 +10,11 @@ use axum::Router;
 use axum::extract::{Path, State};
 use axum::http::header::SET_COOKIE;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
-use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use pardeh::{
-    Item, Node, Signals, a, button, card, code, div, el, form, h1, head, html_tag, input, label,
-    list, p, script, span, table, tbody, td, textarea, th, title, tr,
+    Item, Node, Signals, button, card, code, delete, dialog, div, field, form, h1, href, input,
+    label, list, p, script, slice, span, textarea,
 };
 
 use sqlx::SqlitePool;
@@ -26,55 +26,10 @@ use crate::routes::{ident, sane};
 
 const COOKIE: &str = "sylvie_token";
 
-const FAVICON: &str = "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20width%3D%2216%22%20height%3D%2216%22%20rx%3D%223.5%22%20fill%3D%22%23141920%22%2F%3E%3Cpath%20d%3D%22M8%203.2%2012.8%208%208%2012.8%203.2%208z%22%20fill%3D%22%239fc3ec%22%2F%3E%3C%2Fsvg%3E";
-
 pub fn seed(app: &pardeh::App) {
     app.signals().define("devices", Vec::<Item>::new());
     app.signals().define("secrets", Vec::<Item>::new());
     app.signals().define("files", Vec::<Item>::new());
-}
-
-fn file_region(key: &'static str, empty: &'static str) -> impl Fn(&Signals) -> Node {
-    move |signals: &Signals| {
-        let rows = signals.get::<Vec<Item>>(key);
-        let body = if rows.is_empty() {
-            tr().kid(
-                td().attr("colspan", "4")
-                    .kid(span().class("muted").text(empty)),
-            )
-        } else {
-            tbody().kids(rows.iter().map(|item| {
-                tr().kid(td().text(item.label.clone()))
-                    .kid(td().kid(span().class("muted").text(item.meta.clone())))
-                    .kid(td().class("mono").text(item.key.clone()))
-                    .kid(
-                        td().kid(
-                            form()
-                                .class("inline")
-                                .attr("method", "post")
-                                .attr("action", format!("/web/file/{}", item.key))
-                                .kid(button().attr("type", "submit").text("delete"))
-                                .kid(
-                                    a().attr("href", format!("/api/v1/files/{}/content", item.key))
-                                        .attr("download", "")
-                                        .attr("target", "_blank")
-                                        .attr("rel", "noopener")
-                                        .text("download"),
-                                ),
-                        ),
-                    )
-            }))
-        };
-        table()
-            .kid(
-                tr().kid(th())
-                    .kid(th())
-                    .kid(th())
-                    .kid(th())
-                    .kid(th().text("")),
-            )
-            .kid(tbody().kid(body))
-    }
 }
 
 fn styles() -> Node {
@@ -82,65 +37,8 @@ fn styles() -> Node {
 }
 
 const CSS: &str = r#"
-:root {
-    color-scheme: dark;
-    --bg: #0e1116;
-    --panel: #151a21;
-    --hover: #181f27;
-    --ink: #10151b;
-    --line: #232a33;
-    --line2: #1d242c;
-    --text: #d7dde6;
-    --muted: #8b96a5;
-    --faint: #7d8894;
-    --accent: #6f9bd1;
-    --good: #8bd3a7;
-    --bad: #f2a5b5;
-    --radius: 12px;
-}
-* { box-sizing: border-box }
-body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, sans-serif; padding: 2.75rem 1rem 3rem }
-h1 { font-size: 1.3rem; letter-spacing: .04em; margin: 0 }
-.wrap { max-width: 52rem; margin: auto; display: grid; gap: 1.1rem }
-.top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; padding-bottom: 1.15rem; border-bottom: 1px solid var(--line2) }
-.actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap }
-.status { color: var(--muted); font-size: .82rem; min-height: 1.3rem }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden }
-.card .head { display: flex; justify-content: space-between; align-items: baseline; padding: .95rem 1.15rem .55rem }
-.card .head h1 { font-size: .78rem; text-transform: uppercase; letter-spacing: .14em; color: var(--muted) }
-.card .tools { display: grid; gap: .6rem; padding: .8rem 1.15rem 1.05rem; border-top: 1px solid var(--line2) }
-table { width: 100%; border-collapse: collapse }
-th { display: none }
-td { padding: .65rem .75rem .65rem 1.15rem; border-top: 1px solid var(--line2); font-size: .92rem; vertical-align: middle }
-td:first-child { width: 30% }
-td:last-child { width: 1%; padding-right: 1.15rem; text-align: right; white-space: nowrap }
-tbody tr { transition: background .12s }
-tbody tr:hover td { background: var(--hover) }
-td[colspan] { padding: 1.6rem 1rem; text-align: center; color: var(--faint) }
-td[colspan] .muted { color: inherit }
-.muted { color: var(--muted); font-size: .85rem }
-.mono { font-family: ui-monospace, monospace; font-size: .72rem; color: #5c6773; max-width: 7rem; overflow-wrap: anywhere }
-form.inline { display: inline; margin: 0 }
-form.inline button { color: var(--muted) }
-button, .link { background: var(--panel); border: 1px solid var(--line); color: #cfe0f5; border-radius: 8px; padding: .32rem .8rem; cursor: pointer; font-size: .82rem; line-height: 1.45; text-decoration: none; display: inline-block; vertical-align: middle; transition: background .12s, border-color .12s, color .12s }
-button:hover, .link:hover { background: var(--hover); border-color: #33414f }
-button:disabled { opacity: .5; cursor: default }
-.tools button[type=submit] { width: 100%; background: var(--accent); border-color: #2f5d8c; color: #0b1420 }
-.tools button[type=submit]:hover { background: #82b2e8 }
-.login button[type=submit] { width: 100% }
-input[type=text], input[type=password], textarea { width: 100%; padding: .6rem .75rem; background: var(--ink); color: var(--text); border: 1px solid var(--line); border-radius: 8px; font-size: .95rem; font-family: inherit; transition: border-color .12s }
-input[type=text]:focus, input[type=password]:focus, textarea:focus { border-color: var(--accent) }
-input[type=file] { width: 100%; padding: .55rem .75rem; background: var(--ink); color: var(--muted); border: 1px dashed #33414f; border-radius: 8px; font-size: .85rem }
-textarea { resize: vertical; min-height: 3.6rem }
-.row { display: grid; gap: .5rem; grid-template-columns: 1fr auto; align-items: center }
-.row button[type=submit] { width: auto; min-width: 4.5rem }
-[data-pardeh] { overflow-x: auto }
-.field { display: grid; gap: .35rem; padding: 0 0 .45rem }
-.tools .field { padding-bottom: 0 }
-.field span { font-size: .8rem; color: var(--muted) }
-.hint { display: block; color: var(--faint); font-size: .8rem }
-.err { color: var(--bad); font-size: .82rem; min-height: 1.25rem; padding-left: .55rem; border-left: 2px solid rgba(232, 121, 140, .4); line-height: 1.4 }
 .login { max-width: 22rem; margin: 9vh auto 0; padding: 0 1rem }
+.login button[type=submit] { width: 100% }
 .brand { padding: 1.7rem 1.5rem .4rem; text-align: center }
 .brand h1 { font-size: 1.5rem; letter-spacing: .14em }
 .brand p { margin: .3rem 0 0; color: var(--muted); font-size: .82rem }
@@ -160,36 +58,18 @@ textarea { resize: vertical; min-height: 3.6rem }
 .reveal.on { display: block; margin-top: .4rem }
 .reveal code { display: block; overflow-x: auto; background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: .6rem .75rem; color: var(--good); font-family: ui-monospace, monospace; font-size: .82rem; white-space: pre-wrap; word-break: break-all }
 .btns { display: flex; gap: .5rem; justify-content: flex-end; margin-top: .6rem }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; padding-bottom: 1.15rem; border-bottom: 1px solid var(--line2) }
+.actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap }
+.status { color: var(--muted); font-size: .82rem; min-height: 1.3rem }
 .chip { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 999px; padding: .3rem .9rem; font-size: .78rem; cursor: pointer; transition: color .12s, border-color .12s }
 .chip::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: .5rem; background: #55606c; vertical-align: 1px }
 .chip.on { color: var(--good); border-color: #2f5a44 }
 .chip.on::before { background: var(--good) }
-dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 0; width: 21rem; max-width: calc(100vw - 2rem); box-shadow: 0 18px 48px rgba(0, 0, 0, .45) }
-dialog::backdrop { background: rgba(4, 6, 10, .65); backdrop-filter: blur(2px) }
-dialog .tools { padding: 1.25rem 1.25rem 1.15rem; display: grid; gap: .8rem; border: 0 }
-dialog .title { font-size: .95rem; font-weight: 600; color: #e7eef7 }
-dialog .row { grid-template-columns: 1fr 1fr }
-dialog button[type=submit] { width: auto }
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes open { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
-  dialog[open] { animation: open .16s ease-out }
-}
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
-::selection { background: #2b3f5c; color: #f2f6fb }
-* { scrollbar-width: thin; scrollbar-color: #33414f transparent }
-*::-webkit-scrollbar { width: 10px; height: 10px }
-*::-webkit-scrollbar-thumb { background: #33414f; border-radius: 5px; border: 2px solid transparent; background-clip: content-box }
+.hint { display: block; color: var(--faint); font-size: .8rem }
 @media (max-width: 620px) {
-  body { padding: 1.3rem .8rem 2rem }
   .login { margin-top: 5vh }
-  input[type=text], input[type=password], textarea { font-size: 16px }
-  td { padding: .55rem .6rem .55rem .9rem }
-  td:last-child { padding-right: .9rem }
-  td[colspan] { padding: 1.2rem .8rem }
-  table { min-width: 24rem }
   .top { flex-direction: column; align-items: flex-start; gap: .6rem }
   .actions { width: 100%; justify-content: space-between }
-  .row { grid-template-columns: 1fr }
 }
 "#;
 
@@ -227,7 +107,11 @@ fn dashboard(signals: &Signals) -> Node {
                     "devices",
                     signals.region(
                         "devices",
-                        list("devices", "no devices yet", "/web/device", "revoke"),
+                        list(
+                            "devices",
+                            "no devices yet",
+                            slice().remove(delete("/web/device", "revoke", true)),
+                        ),
                     ),
                     None,
                 ))
@@ -235,13 +119,26 @@ fn dashboard(signals: &Signals) -> Node {
                     "secrets",
                     signals.region(
                         "secrets",
-                        list("secrets", "no secrets yet", "/web/secret", "delete"),
+                        list(
+                            "secrets",
+                            "no secrets yet",
+                            slice().remove(delete("/web/secret", "delete", true)),
+                        ),
                     ),
                     Some(secret_tools()),
                 ))
                 .kid(card(
                     "files",
-                    signals.region("files", file_region("files", "no files yet")),
+                    signals.region(
+                        "files",
+                        list(
+                            "files",
+                            "no files yet",
+                            slice()
+                                .remove(delete("/web/file", "delete", true))
+                                .link(href("/api/v1/files/{}/content", "download")),
+                        ),
+                    ),
                     Some(file_tools()),
                 ))
                 .kid(card("account", passwd_form(), None))
@@ -325,7 +222,15 @@ fn passwd_form() -> Node {
     form()
         .attr("id", "passwd")
         .class("tools")
-        .kid(credential("new password (min 8)", "new", "password", "new-password", "", true, true))
+        .kid(
+            field("new password (min 8)")
+                .name("new")
+                .kind("password")
+                .auto("new-password")
+                .need()
+                .min(8)
+                .node(),
+        )
         .kid(div().class("field").kid(button().attr("type", "submit").text("change password")))
         .kid(
             div()
@@ -337,7 +242,7 @@ fn passwd_form() -> Node {
 }
 
 fn unlock_dialog() -> Node {
-    el("dialog")
+    dialog()
         .attr("id", "unlock-dialog")
         .kid(
             form()
@@ -345,18 +250,14 @@ fn unlock_dialog() -> Node {
                 .attr("class", "tools")
                 .kid(div().class("title").text("unlock vault"))
                 .kid(
-                    div()
-                        .class("field")
-                        .kid(span().text("password"))
-                        .kid(
-                            input()
-                                .attr("type", "password")
-                                .attr("id", "unlock-password")
-                                .attr("name", "password")
-                                .attr("placeholder", "unlock this vault")
-                                .attr("autocomplete", "current-password")
-                                .attr("required", ""),
-                        ),
+                    field("password")
+                        .name("password")
+                        .kind("password")
+                        .auto("current-password")
+                        .placeholder("unlock this vault")
+                        .id("unlock-password")
+                        .need()
+                        .node(),
                 )
                 .kid(
                     div()
@@ -385,24 +286,6 @@ fn logout_form() -> Node {
         .attr("method", "post")
         .attr("action", "/logout")
         .kid(button().text("log out"))
-}
-
-fn credential(label: &str, name: &str, kind: &str, auto: &str, placeholder: &str, need: bool, min: bool) -> Node {
-    let mut field = input()
-        .attr("type", kind)
-        .attr("name", name)
-        .attr("placeholder", placeholder)
-        .attr("autocomplete", auto);
-    if need {
-        field = field.attr("required", "");
-    }
-    if min {
-        field = field.attr("minlength", "8");
-    }
-    div()
-        .class("field")
-        .kid(span().text(label))
-        .kid(field)
 }
 
 fn radio(id: &str, on: bool) -> Node {
@@ -456,17 +339,26 @@ fn login_body(create: bool) -> Node {
 fn register_form() -> Node {
     form()
         .attr("id", "form-register")
-        .kid(credential("username", "user", "text", "username", "you", true, false))
-        .kid(credential(
-            "password",
-            "password",
-            "password",
-            "new-password",
-            "min 8 characters",
-            true,
-            true,
-        ))
-        .kid(credential("device name", "name", "text", "off", "this browser", false, false))
+        .kid(
+            field("username")
+                .name("user")
+                .kind("text")
+                .auto("username")
+                .placeholder("you")
+                .need()
+                .node(),
+        )
+        .kid(
+            field("password")
+                .name("password")
+                .kind("password")
+                .auto("new-password")
+                .placeholder("min 8 characters")
+                .need()
+                .min(8)
+                .node(),
+        )
+        .kid(field("device name").name("name").placeholder("this browser").node())
         .kid(div().class("field").kid(button().attr("type", "submit").text("create account")))
         .kid(
             div()
@@ -480,17 +372,25 @@ fn register_form() -> Node {
 fn login_form() -> Node {
     form()
         .attr("id", "form-login")
-        .kid(credential("username", "user", "text", "username", "you", true, false))
-        .kid(credential(
-            "password",
-            "password",
-            "password",
-            "current-password",
-            "your password",
-            true,
-            false,
-        ))
-        .kid(credential("device name", "name", "text", "off", "this browser", false, false))
+        .kid(
+            field("username")
+                .name("user")
+                .kind("text")
+                .auto("username")
+                .placeholder("you")
+                .need()
+                .node(),
+        )
+        .kid(
+            field("password")
+                .name("password")
+                .kind("password")
+                .auto("current-password")
+                .placeholder("your password")
+                .need()
+                .node(),
+        )
+        .kid(field("device name").name("name").placeholder("this browser").node())
         .kid(div().class("field").kid(button().attr("type", "submit").text("unlock")))
         .kid(
             div()
@@ -505,26 +405,16 @@ fn token_form() -> Node {
     form()
         .attr("method", "post")
         .attr("action", "/login")
-        .kid(credential("device token", "token", "password", "off", "sylvie token", true, false))
+        .kid(
+            field("device token")
+                .name("token")
+                .kind("password")
+                .placeholder("sylvie token")
+                .need()
+                .node(),
+        )
         .kid(span().class("hint").text("from a device already enrolled"))
         .kid(div().class("field").kid(button().attr("type", "submit").text("unlock")))
-}
-
-fn page(page_title: &str, body: Node) -> Response {
-    let shell = html_tag()
-        .kid(
-            head()
-                .kid(title().text(page_title))
-                .kid(
-                    el("meta")
-                        .attr("name", "viewport")
-                        .attr("content", "width=device-width, initial-scale=1"),
-                )
-                .kid(el("link").attr("rel", "icon").attr("href", FAVICON))
-                .kid(script().attr("src", pardeh::SCRIPT_PATH).attr("defer", "defer")),
-        )
-        .kid(body);
-    Html(format!("<!doctype html>{}", shell.render())).into_response()
 }
 
 pub fn router(ctx: Ctx) -> Router {
@@ -554,7 +444,7 @@ async fn index(State(ctx): State<Ctx>, headers: HeaderMap) -> Response {
         return see("/login");
     };
     refresh(ctx.web().signals(), ctx.db(), &account.0).await;
-    page("sylvie", dashboard(ctx.web().signals()))
+    ctx.web().page("sylvie", dashboard(ctx.web().signals()))
 }
 
 async fn login_get(State(ctx): State<Ctx>) -> Response {
@@ -562,7 +452,7 @@ async fn login_get(State(ctx): State<Ctx>) -> Response {
         .fetch_one(ctx.db())
         .await
         .unwrap_or_default();
-    page("unlock", login_body(has == 0))
+    ctx.web().page("unlock", login_body(has == 0))
 }
 
 async fn login_post(

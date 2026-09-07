@@ -293,26 +293,6 @@ async function showStatus() {
 }
 
 function wire() {
-    document.addEventListener("submit", (event) => {
-        const form = event.target;
-        const action = form.getAttribute("action") || "";
-        if (!action.includes("/web/")) return;
-        const row = form.closest("tr");
-        const cell = row && row.querySelector("td");
-        const label = cell ? cell.textContent.trim() : "";
-        const verb = action.includes("/web/file") || action.includes("/web/secret")
-            ? "delete"
-            : "revoke";
-        const noun = action.includes("/web/file")
-            ? "file"
-            : action.includes("/web/secret")
-                ? "secret"
-                : "device";
-        if (!confirm(label ? `${verb} ${noun} ${label}?` : `${verb} this ${noun}?`)) {
-            event.preventDefault();
-        }
-    }, true);
-
     const reg = el("form-register");
     if (reg) {
         reg.addEventListener("submit", (event) => {
